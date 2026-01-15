@@ -1,1 +1,1 @@
-export { default } from './1.0.0';
+export { default } from './release/1.20.4';

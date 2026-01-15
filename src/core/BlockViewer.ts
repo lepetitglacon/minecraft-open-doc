@@ -82,6 +82,10 @@ export class BlockViewer {
     return this.modLoader.loadMod(configPath);
   }
 
+  registerMod(modDef: ModDefinition): ModDefinition {
+    return this.modLoader.registerMod(modDef);
+  }
+
   async loadMods(configPaths: string[]): Promise<ModDefinition[]> {
     return this.modLoader.loadAllMods(configPaths);
   }

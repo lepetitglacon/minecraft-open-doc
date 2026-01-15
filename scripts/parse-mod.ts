@@ -64,7 +64,7 @@ async function cloneRepo(repoUrl: string, branch?: string): Promise<string> {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 
   try {
-    const branchArg = branch ? `-b ${branch}` : '';
+    const branchArg = branch ? `-b ${branch} --single-branch` : '';
     execSync(`git clone --depth 1 ${branchArg} ${repoUrl} ${clonePath}`, {
       stdio: 'inherit',
       timeout: 120000
@@ -423,8 +423,9 @@ async function parseModFromRepo(
 
     // Create TypeScript config file
     const configDir = path.join(PROJECT_ROOT, 'src', 'mods', namespace);
-    fs.mkdirSync(configDir, { recursive: true });
-
+    const finalConfigDir = path.dirname(path.join(configDir, `${version}.ts`));
+    fs.mkdirSync(finalConfigDir, { recursive: true });
+    
     const configFile = path.join(configDir, `${version}.ts`);
     fs.writeFileSync(configFile, generateTypeScriptConfig(modDef, version));
     console.log(`\nWrote mod config: ${configFile}`);
@@ -440,9 +441,11 @@ async function parseModFromRepo(
     let copiedCount = 0;
     if (fs.existsSync(texturesDir)) {
       for (const texture of usedTextures) {
-        const textureName = texture.replace('.png', '');
-        const sourcePath = path.join(texturesDir, `${textureName}.png`);
+        const sourcePath = path.join(texturesDir, texture);
         const destPath = path.join(textureOutputDir, texture);
+
+        const finalTextureDir = path.dirname(destPath);
+        fs.mkdirSync(finalTextureDir, { recursive: true });
 
         if (fs.existsSync(sourcePath)) {
           fs.copyFileSync(sourcePath, destPath);

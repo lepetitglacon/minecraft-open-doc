@@ -28,6 +28,14 @@ async function init() {
     console.warn('Could not load AE2 mod:', e);
   }
 
+  try {
+    const { default: mekanismMod } = await import('./mods/mekanism');
+    viewer.registerMod(mekanismMod);
+    console.log('Loaded Mekanism blocks');
+  } catch (e) {
+    console.warn('Could not load Mekanism mod:', e);
+  }
+
   // Create UI
   createUI(viewer);
 
