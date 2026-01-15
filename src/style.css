@@ -1,0 +1,155 @@
+:root {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #e0e0e0;
+  background-color: #0a0a0f;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
+#ui-container {
+  width: 280px;
+  min-width: 280px;
+  height: 100%;
+  background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-right: 1px solid #2a2a4a;
+  overflow-y: auto;
+}
+
+#ui-container h2 {
+  font-size: 1.4rem;
+  color: #7c8aff;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+#viewer-container {
+  flex: 1;
+  height: 100%;
+  background: #1a1a2e;
+}
+
+.mode-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-container label {
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.mode-container select {
+  flex: 1;
+}
+
+.selector-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.selector-container label {
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+select {
+  width: 100%;
+  padding: 10px;
+  font-size: 1rem;
+  border: 1px solid #3a3a5a;
+  border-radius: 6px;
+  background: #0f0f1a;
+  color: #e0e0e0;
+  cursor: pointer;
+}
+
+select:hover {
+  border-color: #7c8aff;
+}
+
+select:focus {
+  outline: none;
+  border-color: #7c8aff;
+  box-shadow: 0 0 0 2px rgba(124, 138, 255, 0.2);
+}
+
+optgroup {
+  font-weight: bold;
+  color: #7c8aff;
+}
+
+option {
+  padding: 8px;
+  color: #e0e0e0;
+}
+
+button {
+  width: 100%;
+  padding: 12px;
+  font-size: 1rem;
+  border: none;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.2s;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+.buttons-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.buttons-container button:last-child {
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+}
+
+.buttons-container button:last-child:hover {
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+}
+
+.instructions {
+  margin-top: auto;
+  font-size: 0.85rem;
+  color: #888;
+  line-height: 1.6;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+}
+
+.instructions strong {
+  color: #aaa;
+}

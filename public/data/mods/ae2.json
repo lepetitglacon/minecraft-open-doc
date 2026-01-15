@@ -1,0 +1,80 @@
+{
+  "namespace": "ae2",
+  "name": "Applied Energistics 2",
+  "version": "15.0.0",
+  "textureBasePath": "/textures/ae2/blocks/",
+  "blocks": [
+    {
+      "id": "ae2:controller",
+      "displayName": "ME Controller",
+      "shape": "full_cube",
+      "textures": { "all": "controller.png" }
+    },
+    {
+      "id": "ae2:drive",
+      "displayName": "ME Drive",
+      "shape": "full_cube",
+      "textures": {
+        "top": "drive_top.png",
+        "bottom": "drive_bottom.png",
+        "sides": "drive_side.png"
+      }
+    },
+    {
+      "id": "ae2:crafting_unit",
+      "displayName": "Crafting Unit",
+      "shape": "full_cube",
+      "textures": { "all": "crafting_unit.png" }
+    },
+    {
+      "id": "ae2:interface",
+      "displayName": "ME Interface",
+      "shape": "full_cube",
+      "textures": { "all": "interface.png" }
+    },
+    {
+      "id": "ae2:inscriber",
+      "displayName": "Inscriber",
+      "shape": "full_cube",
+      "textures": {
+        "top": "inscriber_top.png",
+        "bottom": "inscriber_bottom.png",
+        "sides": "inscriber_side.png"
+      }
+    },
+    {
+      "id": "ae2:charger",
+      "displayName": "Charger",
+      "shape": "full_cube",
+      "textures": {
+        "top": "charger_top.png",
+        "bottom": "charger_bottom.png",
+        "sides": "charger_side.png"
+      }
+    },
+    {
+      "id": "ae2:quartz_block",
+      "displayName": "Certus Quartz Block",
+      "shape": "full_cube",
+      "textures": { "all": "quartz_block.png" }
+    },
+    {
+      "id": "ae2:fluix_block",
+      "displayName": "Fluix Block",
+      "shape": "full_cube",
+      "textures": { "all": "fluix_block.png" }
+    },
+    {
+      "id": "ae2:sky_stone_block",
+      "displayName": "Sky Stone Block",
+      "shape": "full_cube",
+      "textures": { "all": "sky_stone_block.png" }
+    },
+    {
+      "id": "ae2:energy_cell",
+      "displayName": "Energy Cell",
+      "shape": "full_cube",
+      "textures": { "all": "energy_cell.png" }
+    }
+  ]
+}
