@@ -3,6 +3,7 @@ import { SceneManager } from './SceneManager';
 import { CameraController, CameraOptions } from './CameraController';
 import { LightingManager } from './LightingManager';
 import { InteractionManager } from './InteractionManager';
+import { SceneStorageManager } from './SceneStorageManager';
 import { TextureManager } from '../textures/TextureManager';
 import { BlockRegistry } from '../blocks/BlockRegistry';
 import { BlockFactory } from '../blocks/BlockFactory';
@@ -180,6 +181,74 @@ export class BlockViewer {
   // Clear all placed blocks
   clearPlacedBlocks(): void {
     this.interactionManager.clearAllBlocks();
+  }
+
+  // Scene management
+  private sceneStorage = new SceneStorageManager();
+  private currentSceneId: string | null = null;
+
+  getSceneManager(): SceneStorageManager {
+    return this.sceneStorage;
+  }
+
+  getCurrentSceneId(): string | null {
+    return this.currentSceneId;
+  }
+
+  saveScene(name?: string): string {
+    const blocks = this.getPlacedBlocks();
+
+    if (this.currentSceneId) {
+      // Update existing scene
+      this.sceneStorage.updateScene(this.currentSceneId, { blocks });
+      return this.currentSceneId;
+    } else {
+      // Create new scene
+      const id = this.sceneStorage.createScene({
+        name: name || `Scene ${this.sceneStorage.listScenes().length + 1}`,
+        blocks,
+      });
+      this.currentSceneId = id;
+      return id;
+    }
+  }
+
+  saveSceneAs(name: string): string {
+    const blocks = this.getPlacedBlocks();
+    const id = this.sceneStorage.createScene({ name, blocks });
+    this.currentSceneId = id;
+    return id;
+  }
+
+  async loadScene(sceneId?: string): Promise<boolean> {
+    // If no id provided, try to load last opened scene
+    const id = sceneId || localStorage.getItem('minecraft-viewer-last-scene');
+    if (!id) return false;
+
+    const scene = this.sceneStorage.getScene(id);
+    if (!scene) return false;
+
+    // Clear existing blocks
+    this.interactionManager.clearAllBlocks();
+
+    // Load saved blocks
+    for (const block of scene.blocks) {
+      const { blockId, position } = block;
+      if (!this.blockRegistry.get(blockId)) continue;
+
+      const mesh = await this.blockFactory.createMesh(blockId);
+      const pos = new THREE.Vector3(position.x, position.y, position.z);
+      this.interactionManager.addBlock(mesh, blockId, pos);
+    }
+
+    this.currentSceneId = id;
+    localStorage.setItem('minecraft-viewer-last-scene', id);
+    return true;
+  }
+
+  newScene(): void {
+    this.interactionManager.clearAllBlocks();
+    this.currentSceneId = null;
   }
 
   start(): void {

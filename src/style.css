@@ -132,12 +132,126 @@ button:active {
   gap: 8px;
 }
 
-.buttons-container button:last-child {
+button.save-btn {
+  background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%);
+}
+
+button.save-btn:hover {
+  box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+}
+
+button.danger-btn {
   background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
 }
 
-.buttons-container button:last-child:hover {
+button.danger-btn:hover {
   box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+}
+
+/* Scene info */
+.scene-info {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  text-align: center;
+}
+
+.scene-name {
+  font-weight: 500;
+  color: #7c8aff;
+}
+
+/* Scene section */
+.scene-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scene-section h3 {
+  font-size: 0.9rem;
+  color: #aaa;
+  margin: 0;
+}
+
+.scene-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.scene-buttons button {
+  flex: 1;
+  padding: 8px;
+  font-size: 0.85rem;
+}
+
+/* Scene list */
+.scene-list {
+  max-height: 200px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+}
+
+.no-scenes {
+  padding: 16px;
+  text-align: center;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.scene-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.scene-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.scene-item.active {
+  background: rgba(124, 138, 255, 0.15);
+  border-left: 3px solid #7c8aff;
+}
+
+.scene-item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scene-item-name {
+  font-size: 0.9rem;
+  color: #e0e0e0;
+}
+
+.scene-item-meta {
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.scene-item-actions button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid #555;
+  color: #888;
+}
+
+.scene-item-actions button:hover {
+  background: #e74c3c;
+  border-color: #e74c3c;
+  color: white;
+  transform: none;
+  box-shadow: none;
 }
 
 .instructions {

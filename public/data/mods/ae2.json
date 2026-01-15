@@ -1,80 +1,142 @@
 {
   "namespace": "ae2",
-  "name": "Applied Energistics 2",
-  "version": "15.0.0",
+  "name": "Ae2",
+  "version": "1.0.0",
   "textureBasePath": "/textures/ae2/blocks/",
   "blocks": [
     {
+      "id": "ae2:chiseled_quartz_block",
+      "displayName": "Chiseled Quartz Block",
+      "shape": "full_cube",
+      "textures": {
+        "top": "cut_quartz_block.png",
+        "bottom": "cut_quartz_block.png",
+        "sides": "chiseled_quartz_block_side.png"
+      }
+    },
+    {
       "id": "ae2:controller",
-      "displayName": "ME Controller",
-      "shape": "full_cube",
-      "textures": { "all": "controller.png" }
-    },
-    {
-      "id": "ae2:drive",
-      "displayName": "ME Drive",
+      "displayName": "Controller",
       "shape": "full_cube",
       "textures": {
-        "top": "drive_top.png",
-        "bottom": "drive_bottom.png",
-        "sides": "drive_side.png"
+        "all": "controller.png"
       }
     },
     {
-      "id": "ae2:crafting_unit",
-      "displayName": "Crafting Unit",
-      "shape": "full_cube",
-      "textures": { "all": "crafting_unit.png" }
-    },
-    {
-      "id": "ae2:interface",
-      "displayName": "ME Interface",
-      "shape": "full_cube",
-      "textures": { "all": "interface.png" }
-    },
-    {
-      "id": "ae2:inscriber",
-      "displayName": "Inscriber",
+      "id": "ae2:crank",
+      "displayName": "Crank",
       "shape": "full_cube",
       "textures": {
-        "top": "inscriber_top.png",
-        "bottom": "inscriber_bottom.png",
-        "sides": "inscriber_side.png"
+        "all": "crank.png"
       }
     },
     {
-      "id": "ae2:charger",
-      "displayName": "Charger",
+      "id": "ae2:cut_quartz_block",
+      "displayName": "Cut Quartz Block",
       "shape": "full_cube",
       "textures": {
-        "top": "charger_top.png",
-        "bottom": "charger_bottom.png",
-        "sides": "charger_side.png"
+        "all": "cut_quartz_block.png"
       }
-    },
-    {
-      "id": "ae2:quartz_block",
-      "displayName": "Certus Quartz Block",
-      "shape": "full_cube",
-      "textures": { "all": "quartz_block.png" }
     },
     {
       "id": "ae2:fluix_block",
       "displayName": "Fluix Block",
       "shape": "full_cube",
-      "textures": { "all": "fluix_block.png" }
+      "textures": {
+        "all": "fluix_block.png"
+      }
     },
     {
-      "id": "ae2:sky_stone_block",
-      "displayName": "Sky Stone Block",
+      "id": "ae2:light_detector",
+      "displayName": "Light Detector",
       "shape": "full_cube",
-      "textures": { "all": "sky_stone_block.png" }
+      "textures": {
+        "all": "quartz_fixture.png"
+      }
     },
     {
-      "id": "ae2:energy_cell",
-      "displayName": "Energy Cell",
+      "id": "ae2:molecular_assembler",
+      "displayName": "Molecular Assembler",
       "shape": "full_cube",
-      "textures": { "all": "energy_cell.png" }
+      "textures": {
+        "all": "molecular_assembler.png"
+      }
+    },
+    {
+      "id": "ae2:quantum_link",
+      "displayName": "Quantum Link",
+      "shape": "full_cube",
+      "textures": {
+        "all": "quantum_link.png",
+        "sides": "quantum_link.png"
+      }
+    },
+    {
+      "id": "ae2:quantum_ring",
+      "displayName": "Quantum Ring",
+      "shape": "full_cube",
+      "textures": {
+        "all": "quantum_ring.png",
+        "sides": "quantum_ring.png"
+      }
+    },
+    {
+      "id": "ae2:quartz_block",
+      "displayName": "Quartz Block",
+      "shape": "full_cube",
+      "textures": {
+        "all": "quartz_block.png"
+      }
+    },
+    {
+      "id": "ae2:quartz_fixture",
+      "displayName": "Quartz Fixture",
+      "shape": "full_cube",
+      "textures": {
+        "all": "quartz_fixture.png"
+      }
+    },
+    {
+      "id": "ae2:quartz_pillar",
+      "displayName": "Quartz Pillar",
+      "shape": "full_cube",
+      "textures": {
+        "top": "cut_quartz_block.png",
+        "bottom": "cut_quartz_block.png",
+        "sides": "quartz_pillar_side.png"
+      }
+    },
+    {
+      "id": "ae2:sky_stone_tank",
+      "displayName": "Sky Stone Tank",
+      "shape": "full_cube",
+      "textures": {
+        "all": "sky_stone_tank.png"
+      }
+    },
+    {
+      "id": "ae2:smooth_sky_stone_block",
+      "displayName": "Smooth Sky Stone Block",
+      "shape": "full_cube",
+      "textures": {
+        "all": "smooth_sky_stone_block.png"
+      }
+    },
+    {
+      "id": "ae2:smooth_sky_stone_chest",
+      "displayName": "Smooth Sky Stone Chest",
+      "shape": "full_cube",
+      "textures": {
+        "all": "smooth_sky_stone_block.png"
+      }
+    },
+    {
+      "id": "ae2:tiny_tnt",
+      "displayName": "Tiny Tnt",
+      "shape": "",
+      "textures": {
+        "all": "tiny_tnt.png"
+      }
     }
   ]
 }

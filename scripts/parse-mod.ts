@@ -46,44 +46,26 @@ function toDisplayName(id: string): string {
     .join(' ');
 }
 
-function downloadFile(url: string, dest: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    https.get(url, (response) => {
-      if (response.statusCode === 302 || response.statusCode === 301) {
-        const redirectUrl = response.headers.location;
-        if (redirectUrl) {
-          file.close();
-          downloadFile(redirectUrl, dest).then(resolve).catch(reject);
-          return;
-        }
-      }
-      response.pipe(file);
-      file.on('finish', () => {
-        file.close();
-        resolve();
-      });
-    }).on('error', (err) => {
-      fs.unlink(dest, () => {});
-      reject(err);
-    });
-  });
+function toCamelCase(str: string): string {
+  return str.replace(/[-_](.)/g, (_, c) => c.toUpperCase());
 }
 
-async function cloneRepo(repoUrl: string): Promise<string> {
+async function cloneRepo(repoUrl: string, branch?: string): Promise<string> {
   const repoName = repoUrl.split('/').pop()?.replace('.git', '') || 'mod';
-  const clonePath = path.join(TEMP_DIR, repoName);
+  const branchSuffix = branch ? `-${branch.replace(/[\/\.]/g, '-')}` : '';
+  const clonePath = path.join(TEMP_DIR, `${repoName}${branchSuffix}`);
 
   if (fs.existsSync(clonePath)) {
     console.log(`Repository already exists at ${clonePath}, using existing...`);
     return clonePath;
   }
 
-  console.log(`Cloning ${repoUrl}...`);
+  console.log(`Cloning ${repoUrl}${branch ? ` (branch: ${branch})` : ''}...`);
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 
   try {
-    execSync(`git clone --depth 1 ${repoUrl} ${clonePath}`, {
+    const branchArg = branch ? `-b ${branch}` : '';
+    execSync(`git clone --depth 1 ${branchArg} ${repoUrl} ${clonePath}`, {
       stdio: 'inherit',
       timeout: 120000
     });
@@ -95,7 +77,6 @@ async function cloneRepo(repoUrl: string): Promise<string> {
 }
 
 function findAssetsDir(repoPath: string): string | null {
-  // Common locations for assets in mod repos
   const possiblePaths = [
     'src/main/resources/assets',
     'src/generated/resources/assets',
@@ -113,7 +94,6 @@ function findAssetsDir(repoPath: string): string | null {
     }
   }
 
-  // Try to find assets directory recursively
   function findDir(dir: string, target: string, depth: number = 0): string | null {
     if (depth > 5) return null;
 
@@ -158,7 +138,6 @@ function resolveTexture(
   modelTextures: Record<string, string>,
   allModels: Map<string, BlockModel>
 ): string {
-  // Handle texture variables like #all, #top, etc.
   if (texturePath.startsWith('#')) {
     const varName = texturePath.slice(1);
     const resolved = modelTextures[varName];
@@ -168,13 +147,11 @@ function resolveTexture(
     return texturePath;
   }
 
-  // Handle namespace:path format
   if (texturePath.includes(':')) {
     const [ns, p] = texturePath.split(':');
     return `${p.replace('block/', '')}.png`;
   }
 
-  // Handle block/texture_name format
   if (texturePath.includes('/')) {
     return `${texturePath.split('/').pop()}.png`;
   }
@@ -208,19 +185,14 @@ function getModelTextures(
     const model = parseBlockModel(fs.readFileSync(modelFile, 'utf-8'));
     let textures: Record<string, string> = {};
 
-    // Get parent textures first
     if (model.parent) {
       let parentPath = model.parent;
-      // Handle minecraft:block/cube_all etc.
-      if (parentPath.startsWith('minecraft:')) {
-        // Skip minecraft parent models, we'll use defaults
-      } else {
+      if (!parentPath.startsWith('minecraft:')) {
         const parentTextures = getModelTextures(parentPath, modelsDir, cache);
         textures = { ...parentTextures };
       }
     }
 
-    // Override with this model's textures
     if (model.textures) {
       textures = { ...textures, ...model.textures };
     }
@@ -250,14 +222,62 @@ function isTransparent(blockId: string, modelTextures: Record<string, string>): 
   return transparentKeywords.some(kw => blockId.includes(kw));
 }
 
+function generateTypeScriptConfig(modDef: ModDefinition, version: string): string {
+  const blocksTs = modDef.blocks.map(block => {
+    const texturesStr = Object.entries(block.textures)
+      .map(([k, v]) => `      ${k}: '${v}'`)
+      .join(',\n');
+
+    let blockStr = `  {
+    id: '${block.id}',
+    displayName: '${block.displayName}',
+    shape: '${block.shape}' as const,
+    textures: {
+${texturesStr}
+    }`;
+
+    if (block.transparent) {
+      blockStr += `,\n    transparent: true`;
+    }
+    if (block.renderType) {
+      blockStr += `,\n    renderType: '${block.renderType}' as const`;
+    }
+
+    blockStr += `\n  }`;
+    return blockStr;
+  }).join(',\n');
+
+  return `import type { ModDefinition } from '../../types';
+
+const ${toCamelCase(modDef.namespace)}Mod: ModDefinition = {
+  namespace: '${modDef.namespace}',
+  name: '${modDef.name}',
+  version: '${version}',
+  textureBasePath: '${modDef.textureBasePath}',
+  blocks: [
+${blocksTs}
+  ]
+};
+
+export default ${toCamelCase(modDef.namespace)}Mod;
+`;
+}
+
 async function parseModFromRepo(
   repoUrl: string,
-  options: { namespace?: string; modName?: string; version?: string } = {}
+  options: {
+    branch?: string;
+    modName?: string;
+    version?: string;
+  } = {}
 ): Promise<void> {
   console.log('\n=== Minecraft Mod Parser ===\n');
 
+  const branch = options.branch;
+  const version = options.version || branch || '1.0.0';
+
   // Clone repository
-  const repoPath = await cloneRepo(repoUrl);
+  const repoPath = await cloneRepo(repoUrl, branch);
 
   // Find assets directory
   const assetsDir = findAssetsDir(repoPath);
@@ -271,7 +291,7 @@ async function parseModFromRepo(
   console.log(`Found namespaces: ${namespaces.join(', ')}`);
 
   for (const namespace of namespaces) {
-    if (namespace === 'minecraft') continue; // Skip vanilla minecraft
+    if (namespace === 'minecraft') continue;
 
     const nsPath = path.join(assetsDir, namespace);
     const blockstatesDir = path.join(nsPath, 'blockstates');
@@ -289,7 +309,6 @@ async function parseModFromRepo(
     const textureCache = new Map<string, Record<string, string>>();
     const usedTextures = new Set<string>();
 
-    // Parse all blockstates
     const blockstateFiles = fs.readdirSync(blockstatesDir)
       .filter(f => f.endsWith('.json'));
 
@@ -302,18 +321,15 @@ async function parseModFromRepo(
       try {
         const blockstate = parseBlockState(fs.readFileSync(bsPath, 'utf-8'));
 
-        // Get model path from blockstate
         let modelPath: string | null = null;
 
         if (blockstate.variants) {
-          // Get the default variant or first variant
           const defaultVariant = blockstate.variants[''] || blockstate.variants['normal'] || Object.values(blockstate.variants)[0];
           if (defaultVariant) {
             const variant = Array.isArray(defaultVariant) ? defaultVariant[0] : defaultVariant;
             modelPath = variant.model;
           }
         } else if (blockstate.multipart) {
-          // Get first multipart apply
           const firstPart = blockstate.multipart[0];
           if (firstPart?.apply) {
             const apply = Array.isArray(firstPart.apply) ? firstPart.apply[0] : firstPart.apply;
@@ -326,7 +342,6 @@ async function parseModFromRepo(
           continue;
         }
 
-        // Get textures from model
         const modelTextures = getModelTextures(modelPath, modelsDir, textureCache);
 
         if (Object.keys(modelTextures).length === 0) {
@@ -334,10 +349,8 @@ async function parseModFromRepo(
           continue;
         }
 
-        // Build texture mapping for our format
         const textures: Record<string, string> = {};
 
-        // Map common texture keys
         const textureMapping: Record<string, string[]> = {
           'all': ['all', 'texture', 'particle'],
           'top': ['top', 'up', 'end'],
@@ -360,7 +373,6 @@ async function parseModFromRepo(
           }
         }
 
-        // If no textures mapped, try to use particle or first texture
         if (Object.keys(textures).length === 0) {
           const firstTexture = Object.values(modelTextures)[0];
           if (firstTexture) {
@@ -400,24 +412,29 @@ async function parseModFromRepo(
       continue;
     }
 
-    // Create mod definition
+    // Create mod definition with versioned texture path
     const modDef: ModDefinition = {
       namespace,
       name: options.modName || toDisplayName(namespace),
-      version: options.version || '1.0.0',
-      textureBasePath: `/textures/${namespace}/blocks/`,
+      version,
+      textureBasePath: `/textures/${namespace}/${version}/blocks/`,
       blocks,
     };
 
-    // Write mod definition
-    const outputDir = path.join(PROJECT_ROOT, 'public', 'data', 'mods');
-    fs.mkdirSync(outputDir, { recursive: true });
-    const outputFile = path.join(outputDir, `${namespace}.json`);
-    fs.writeFileSync(outputFile, JSON.stringify(modDef, null, 2));
-    console.log(`\nWrote mod definition: ${outputFile}`);
+    // Create TypeScript config file
+    const configDir = path.join(PROJECT_ROOT, 'src', 'mods', namespace);
+    fs.mkdirSync(configDir, { recursive: true });
 
-    // Copy textures
-    const textureOutputDir = path.join(PROJECT_ROOT, 'public', 'textures', namespace, 'blocks');
+    const configFile = path.join(configDir, `${version}.ts`);
+    fs.writeFileSync(configFile, generateTypeScriptConfig(modDef, version));
+    console.log(`\nWrote mod config: ${configFile}`);
+
+    // Create index.ts that exports the latest version
+    const indexFile = path.join(configDir, 'index.ts');
+    fs.writeFileSync(indexFile, `export { default } from './${version}';\n`);
+
+    // Copy textures to versioned directory
+    const textureOutputDir = path.join(PROJECT_ROOT, 'public', 'textures', namespace, version, 'blocks');
     fs.mkdirSync(textureOutputDir, { recursive: true });
 
     let copiedCount = 0;
@@ -446,31 +463,34 @@ const args = process.argv.slice(2);
 
 if (args.length === 0) {
   console.log(`
-Usage: npx ts-node scripts/parse-mod.ts <github-repo-url> [options]
+Usage: npm run parse-mod -- <github-repo-url> [options]
 
 Options:
-  --name <name>      Mod display name
-  --version <ver>    Mod version
+  --branch <branch>   Git branch or tag to clone (e.g., 1.20.1, main)
+  --name <name>       Mod display name
+  --version <ver>     Version string (defaults to branch name)
 
 Examples:
-  npx ts-node scripts/parse-mod.ts https://github.com/AppliedEnergistics/Applied-Energistics-2
-  npx ts-node scripts/parse-mod.ts https://github.com/mekanism/Mekanism --name "Mekanism"
+  npm run parse-mod -- https://github.com/AppliedEnergistics/Applied-Energistics-2 --branch 1.20.1
+  npm run parse-mod -- https://github.com/mekanism/Mekanism --branch v10.4.0 --name "Mekanism"
 
 The script will:
-1. Clone the repository
+1. Clone the repository at the specified branch
 2. Find and parse all blockstates
-3. Extract block definitions and textures
-4. Generate a mod JSON file in public/data/mods/
-5. Copy textures to public/textures/<namespace>/blocks/
+3. Generate a TypeScript config in src/mods/<namespace>/<version>.ts
+4. Copy textures to public/textures/<namespace>/<version>/blocks/
 `);
   process.exit(0);
 }
 
 const repoUrl = args[0];
-const options: { namespace?: string; modName?: string; version?: string } = {};
+const options: { branch?: string; modName?: string; version?: string } = {};
 
 for (let i = 1; i < args.length; i++) {
-  if (args[i] === '--name' && args[i + 1]) {
+  if (args[i] === '--branch' && args[i + 1]) {
+    options.branch = args[i + 1];
+    i++;
+  } else if (args[i] === '--name' && args[i + 1]) {
     options.modName = args[i + 1];
     i++;
   } else if (args[i] === '--version' && args[i + 1]) {
