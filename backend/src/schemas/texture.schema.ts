@@ -43,10 +43,22 @@ export class Texture {
   mcmeta?: {
     animation?: {
       frametime?: number;
-      frames?: number[];
+      frames?: (number | { index: number; time?: number })[];
       interpolate?: boolean;
     };
   };
+
+  @Prop()
+  animatedGif?: string; // data:image/gif;base64,... pour les textures animées
+
+  @Prop()
+  frameWidth?: number; // Largeur d'une frame (pour les spritesheets)
+
+  @Prop()
+  frameHeight?: number; // Hauteur d'une frame
+
+  @Prop()
+  frameCount?: number; // Nombre de frames dans la spritesheet
 }
 
 export const TextureSchema = SchemaFactory.createForClass(Texture);

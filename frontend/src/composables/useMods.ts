@@ -1,0 +1,62 @@
+import { useQuery } from '@tanstack/vue-query';
+import { computed, type Ref } from 'vue';
+import api from '../services/api';
+
+export interface Mod {
+  _id: string;
+  modId: string;
+  modVersion: string;
+  minecraftVersion: string;
+  displayName: string;
+  description?: string;
+  authors?: string[];
+  logoFile?: string;
+  logoBase64?: string;
+  websiteUrl?: string;
+}
+
+interface ModsResponse {
+  data: Mod[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+interface UseModsOptions {
+  search?: Ref<string>;
+  page?: Ref<number>;
+  limit?: number;
+}
+
+export function useMods(options: UseModsOptions = {}) {
+  const { search, page, limit = 50 } = options;
+
+  const queryKey = computed(() => [
+    'mods',
+    search?.value || '',
+    page?.value || 1,
+    limit,
+  ]);
+
+  const query = useQuery({
+    queryKey,
+    queryFn: async (): Promise<ModsResponse> => {
+      const response = await api.get('/mods', {
+        params: {
+          search: search?.value || undefined,
+          page: page?.value || 1,
+          limit,
+        },
+      });
+      return response.data;
+    },
+  });
+
+  return {
+    ...query,
+    mods: computed(() => query.data.value?.data || []),
+    total: computed(() => query.data.value?.total || 0),
+    totalPages: computed(() => query.data.value?.pages || 1),
+  };
+}

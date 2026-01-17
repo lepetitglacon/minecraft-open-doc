@@ -14,6 +14,11 @@ const routes: RouteRecordRaw[] = [
     component: Blocks
   },
   {
+    path: '/upload',
+    name: 'Upload',
+    component: () => import('../views/Upload.vue')
+  },
+  {
     path: '/mods/:namespace',
     name: 'ModDetail',
     component: () => import('../views/mod/ModDetail.vue'),
@@ -33,6 +38,12 @@ const routes: RouteRecordRaw[] = [
         path: 'blocks',
         name: 'ModBlocks',
         component: () => import('../views/NamespaceBlocks.vue'),
+        props: true
+      },
+      {
+        path: 'blocks/:blockId',
+        name: 'BlockDetail',
+        component: () => import('../views/BlockDetail.vue'),
         props: true
       },
       {

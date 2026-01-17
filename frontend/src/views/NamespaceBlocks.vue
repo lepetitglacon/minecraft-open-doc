@@ -1,5 +1,7 @@
 <template>
   <div class="jei-container">
+    <Breadcrumb />
+
     <div class="jei-header">
       <input
         type="text"
@@ -18,23 +20,37 @@
 
     <div class="jei-grid-container">
       <div v-if="blocks.length > 0" class="jei-grid">
-        <div
+        <router-link
           v-for="block in blocks"
           :key="block._id"
+          :to="{ name: 'BlockDetail', params: { namespace, blockId: block.blockId } }"
           class="jei-slot"
+          :class="{ 'jei-slot-animated': block.animatedIcon }"
           :title="block.displayName || block.blockId"
         >
-          <img
-            v-if="block.renderedIcon"
-            :src="block.renderedIcon"
-            :alt="block.blockId"
-            class="jei-icon"
-            loading="lazy"
-          />
+          <!-- Icône animée (GIF) si disponible -->
+          <template v-if="block.animatedIcon">
+            <img
+              :src="block.animatedIcon"
+              :alt="block.blockId"
+              class="jei-icon jei-icon-animated"
+              loading="lazy"
+            />
+          </template>
+          <!-- Icône statique (rendu 3D ou fallback) -->
+          <template v-else-if="block.renderedIcon">
+            <img
+              :src="block.renderedIcon"
+              :alt="block.blockId"
+              class="jei-icon"
+              loading="lazy"
+            />
+          </template>
+          <!-- Placeholder si aucune icône -->
           <div v-else class="jei-icon-placeholder">
             <span>{{ block.blockId.charAt(0).toUpperCase() }}</span>
           </div>
-        </div>
+        </router-link>
       </div>
 
       <p v-else-if="!isLoading" class="jei-empty">No blocks found.</p>
@@ -53,6 +69,7 @@ import { ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBlocks } from '../composables/useBlocks';
 import { debounce } from 'lodash-es';
+import Breadcrumb from '../components/Breadcrumb.vue';
 
 const route = useRoute();
 const namespace = computed(() => route.params.namespace as string);
@@ -187,11 +204,16 @@ watch(namespace, () => {
   cursor: pointer;
   transition: background-color 0.1s;
   overflow: hidden;
+  text-decoration: none;
 }
 
 .jei-slot:hover {
   background-color: #aaa;
   border-color: #5c5cff;
+}
+
+a.jei-slot {
+  color: inherit;
 }
 
 .jei-icon {
@@ -200,6 +222,27 @@ watch(namespace, () => {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   object-fit: contain;
+}
+
+.jei-icon-animated {
+  /* Les GIFs animés s'affichent directement */
+}
+
+.jei-slot-animated {
+  /* Indicateur visuel pour les textures animées */
+  position: relative;
+}
+
+.jei-slot-animated::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  background-color: #5c5cff;
+  border-radius: 50%;
+  box-shadow: 0 0 3px #5c5cff;
 }
 
 .jei-icon-placeholder {

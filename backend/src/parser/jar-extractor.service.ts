@@ -11,6 +11,7 @@ export interface ModMetadata {
   description?: string;
   authors?: string[];
   logoFile?: string;
+  logoBase64?: string;
   websiteUrl?: string;
 }
 
@@ -24,6 +25,8 @@ export interface ExtractedTexture {
   filename: string; // block_steel.png
   base64: string;
   mcmeta?: Record<string, unknown>;
+  width?: number;
+  height?: number;
 }
 
 export interface ExtractedModel {
@@ -82,22 +85,88 @@ export class JarExtractorService {
     zip: AdmZip,
     entries: AdmZip.IZipEntry[],
   ): ModMetadata {
+    let metadata: ModMetadata;
+
     // Try NeoForge/Forge format first (mods.toml)
     const modsTomlEntry =
       entries.find((e) => e.entryName === 'META-INF/neoforge.mods.toml') ||
       entries.find((e) => e.entryName === 'META-INF/mods.toml');
 
     if (modsTomlEntry) {
-      return this.parseModsToml(zip.readAsText(modsTomlEntry));
+      metadata = this.parseModsToml(zip.readAsText(modsTomlEntry));
+    } else {
+      // Fallback to legacy format (mcmod.info)
+      const mcmodEntry = entries.find((e) => e.entryName === 'mcmod.info');
+      if (mcmodEntry) {
+        metadata = this.parseMcmodInfo(zip.readAsText(mcmodEntry));
+      } else {
+        throw new Error('No mod metadata found (mods.toml or mcmod.info)');
+      }
     }
 
-    // Fallback to legacy format (mcmod.info)
-    const mcmodEntry = entries.find((e) => e.entryName === 'mcmod.info');
-    if (mcmodEntry) {
-      return this.parseMcmodInfo(zip.readAsText(mcmodEntry));
+    // Extract logo as base64 if specified
+    if (metadata.logoFile) {
+      const logoEntry = this.findLogoFile(entries, metadata.logoFile, metadata.modId);
+
+      if (logoEntry) {
+        try {
+          const buffer = zip.readFile(logoEntry);
+          if (buffer) {
+            const ext = logoEntry.entryName.split('.').pop()?.toLowerCase() || 'png';
+            const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+            metadata.logoBase64 = `data:${mimeType};base64,${buffer.toString('base64')}`;
+            this.logger.log(`Extracted logo for ${metadata.modId} from ${logoEntry.entryName} (${Math.round(metadata.logoBase64.length / 1024)}KB)`);
+          }
+        } catch (error) {
+          this.logger.warn(`Failed to extract logo: ${metadata.logoFile}`);
+        }
+      } else {
+        this.logger.warn(`Logo file specified but not found in JAR: ${metadata.logoFile}`);
+      }
     }
 
-    throw new Error('No mod metadata found (mods.toml or mcmod.info)');
+    return metadata;
+  }
+
+  private findLogoFile(
+    entries: AdmZip.IZipEntry[],
+    logoPath: string,
+    modId: string,
+  ): AdmZip.IZipEntry | undefined {
+    const cleanPath = logoPath.trim().replace(/\\/g, '/').replace(/^(\.\/|\/)+/, '');
+
+    // 1. Try exact path
+    let entry = entries.find((e) => e.entryName === cleanPath);
+    if (entry) return entry;
+
+    // 2. Try in assets root (common mistake: "logo.png" -> "assets/modid/logo.png")
+    entry = entries.find((e) => e.entryName === `assets/${modId}/${cleanPath}`);
+    if (entry) return entry;
+
+    // 3. Try resource location style (if it has :)
+    if (cleanPath.includes(':')) {
+      const [ns, p] = cleanPath.split(':');
+      entry = entries.find((e) => e.entryName === `assets/${ns}/${p}`);
+      if (entry) return entry;
+    }
+
+    // 4. Search by filename in mod assets (fallback)
+    const filename = cleanPath.split('/').pop();
+    if (filename) {
+      // Look for any file ending with this name inside assets/modId/
+      // Sort by length to find the shortest path (likely the most direct one)
+      const candidates = entries
+        .filter(
+          (e) =>
+            e.entryName.includes(`assets/${modId}/`) &&
+            e.entryName.endsWith(filename),
+        )
+        .sort((a, b) => a.entryName.length - b.entryName.length);
+
+      if (candidates.length > 0) return candidates[0];
+    }
+
+    return undefined;
   }
 
   private parseModsToml(content: string): ModMetadata {

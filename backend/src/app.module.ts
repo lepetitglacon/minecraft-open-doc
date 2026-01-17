@@ -6,6 +6,8 @@ import { BlocksModule } from './blocks/blocks.module';
 import { ParserModule } from './parser/parser.module';
 import { TexturesModule } from './textures/textures.module';
 import { ModelsModule } from './models/models.module';
+import { RecipesModule } from './recipes/recipes.module';
+import { ModsModule } from './mods/mods.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { ModelsModule } from './models/models.module';
     ParserModule,
     TexturesModule,
     ModelsModule,
+    RecipesModule,
+    ModsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -17,6 +17,8 @@ interface Block {
   icon?: string;
   textures?: Record<string, string>;
   texturesBase64?: Record<string, string>;
+  animatedTextures?: Record<string, string>; // GIFs animés
+  hasAnimatedTextures?: boolean;
 }
 
 interface BlocksResponse {
@@ -109,10 +111,22 @@ export function useBlocks(options: UseBlocksOptions) {
   const blocksWithRenderedIcons = computed(() => {
     if (!query.data.value?.data) return [];
 
-    return query.data.value.data.map((block) => ({
-      ...block,
-      renderedIcon: renderedIcons.value.get(block._id) || block.icon,
-    }));
+    return query.data.value.data.map((block) => {
+      // Pour les blocs avec textures animées, utiliser le premier GIF disponible
+      let animatedIcon: string | undefined;
+      if (block.hasAnimatedTextures && block.animatedTextures) {
+        const firstGif = Object.values(block.animatedTextures)[0];
+        if (firstGif) {
+          animatedIcon = firstGif;
+        }
+      }
+
+      return {
+        ...block,
+        renderedIcon: renderedIcons.value.get(block._id) || block.icon,
+        animatedIcon, // GIF animé si disponible
+      };
+    });
   });
 
   return {

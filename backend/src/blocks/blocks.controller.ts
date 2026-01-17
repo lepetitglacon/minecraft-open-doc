@@ -47,7 +47,11 @@ export class BlocksController {
     @Param('namespace') namespace: string,
     @Param('blockId') blockId: string,
     @Query('minecraftVersion') minecraftVersion?: string,
+    @Query('withIcons') withIcons?: string,
   ) {
+    if (withIcons === 'true') {
+      return this.blocksService.findOneWithIcons(namespace, blockId, minecraftVersion);
+    }
     return this.blocksService.findOne(namespace, blockId, minecraftVersion);
   }
 }

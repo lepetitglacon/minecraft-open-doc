@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query } from '@nestjs/common';
 import { TexturesService } from './textures.service';
 
 @Controller('textures')
@@ -8,6 +8,11 @@ export class TexturesController {
   @Get('stats')
   async getStats() {
     return this.texturesService.getStats();
+  }
+
+  @Post('regenerate-gifs')
+  async regenerateGifs(@Query('namespace') namespace?: string) {
+    return this.texturesService.regenerateGifs(namespace);
   }
 
   @Get('by-namespace/:namespace')

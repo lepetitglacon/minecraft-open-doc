@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { JarExtractorService } from './jar-extractor.service';
+import { GifGeneratorService } from './gif-generator.service';
 import { Block, BlockDocument } from '../schemas/block.schema';
 import { Mod, ModDocument } from '../schemas/mod.schema';
 import { Texture } from '../schemas/texture.schema';
@@ -23,6 +24,7 @@ export class ParserService {
 
   constructor(
     private readonly jarExtractor: JarExtractorService,
+    private readonly gifGenerator: GifGeneratorService,
     @InjectModel(Mod.name) private modModel: Model<Mod>,
     @InjectModel(Block.name) private blockModel: Model<Block>,
     @InjectModel(Texture.name) private textureModel: Model<Texture>,
@@ -104,7 +106,28 @@ export class ParserService {
 
     // Process textures
     let texturesCreated = 0;
+    let gifsGenerated = 0;
     for (const tex of textures) {
+      // Générer le GIF si la texture est animée
+      let animatedGif: string | undefined;
+      let frameWidth: number | undefined;
+      let frameHeight: number | undefined;
+      let frameCount: number | undefined;
+
+      if (tex.mcmeta?.animation) {
+        const gifResult = await this.gifGenerator.generateGif(
+          tex.base64,
+          tex.mcmeta as { animation?: { frametime?: number; frames?: (number | { index: number; time?: number })[]; interpolate?: boolean } },
+        );
+        if (gifResult) {
+          animatedGif = gifResult.gif;
+          frameWidth = gifResult.frameWidth;
+          frameHeight = gifResult.frameHeight;
+          frameCount = gifResult.frameCount;
+          gifsGenerated++;
+        }
+      }
+
       const result = await this.textureModel.updateOne(
         {
           texturePath: tex.texturePath,
@@ -122,15 +145,21 @@ export class ParserService {
               minecraftVersion: metadata.minecraftVersion,
             },
             base64: tex.base64,
+            width: tex.width,
+            height: tex.height,
             animated: !!tex.mcmeta?.animation,
             mcmeta: tex.mcmeta,
+            animatedGif,
+            frameWidth,
+            frameHeight,
+            frameCount,
           },
         },
         { upsert: true },
       );
       if (result.upsertedCount > 0) texturesCreated++;
     }
-    this.logger.log(`Textures processed: ${texturesCreated} created`);
+    this.logger.log(`Textures processed: ${texturesCreated} created, ${gifsGenerated} GIFs generated`);
 
     // Process models
     let modelsCreated = 0;

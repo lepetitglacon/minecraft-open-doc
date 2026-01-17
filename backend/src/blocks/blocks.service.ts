@@ -41,6 +41,8 @@ export interface BlockWithIcon {
   icon?: string; // base64 de la première texture (fallback)
   textures?: Record<string, string>; // mapping face/variable -> texturePath
   texturesBase64?: Record<string, string>; // mapping texturePath -> base64
+  animatedTextures?: Record<string, string>; // mapping texturePath -> GIF base64 (pour textures animées)
+  hasAnimatedTextures?: boolean; // true si au moins une texture est animée
 }
 
 @Injectable()
@@ -105,6 +107,84 @@ export class BlocksService {
     }
 
     return this.blockModel.findOne(query).exec();
+  }
+
+  async findOneWithIcons(
+    namespace: string,
+    blockId: string,
+    minecraftVersion?: string,
+  ): Promise<BlockWithIcon | null> {
+    const block = await this.findOne(namespace, blockId, minecraftVersion);
+    if (!block) return null;
+
+    let icon: string | undefined;
+    let blockTextures: Record<string, string> | undefined;
+    let blockTexturesBase64: Record<string, string> | undefined;
+    let animatedTextures: Record<string, string> | undefined;
+    let hasAnimatedTextures = false;
+
+    if (block.models && block.models.length > 0) {
+      // Récupérer le modèle
+      const models = await this.modelsService.findMultipleByPaths(
+        [block.models[0]],
+        minecraftVersion,
+      );
+
+      if (models.length > 0) {
+        const model = models[0];
+        blockTextures = model.textures || {};
+
+        // Collecter les chemins de textures
+        const texturePaths = new Set<string>();
+        for (const texPath of Object.values(blockTextures)) {
+          if (typeof texPath === 'string' && !texPath.startsWith('#')) {
+            texturePaths.add(texPath);
+          }
+        }
+        for (const texPath of model.resolvedTextures || []) {
+          texturePaths.add(texPath);
+        }
+
+        // Récupérer les textures
+        const textures = await this.texturesService.findMultiple(
+          Array.from(texturePaths),
+          minecraftVersion,
+        );
+
+        // Construire les maps
+        blockTexturesBase64 = {};
+        animatedTextures = {};
+
+        for (const tex of textures) {
+          blockTexturesBase64[tex.texturePath] = tex.base64;
+          if (tex.animated && tex.animatedGif) {
+            animatedTextures[tex.texturePath] = tex.animatedGif;
+            hasAnimatedTextures = true;
+          }
+        }
+
+        // Icon fallback
+        if (model.resolvedTextures && model.resolvedTextures.length > 0) {
+          icon = blockTexturesBase64[model.resolvedTextures[0]];
+        } else {
+          icon = Object.values(blockTexturesBase64)[0];
+        }
+      }
+    }
+
+    return {
+      _id: block._id.toString(),
+      registryName: block.registryName,
+      namespace: block.namespace,
+      blockId: block.blockId,
+      displayName: block.displayName,
+      mod: block.mod,
+      icon,
+      textures: blockTextures,
+      texturesBase64: blockTexturesBase64,
+      animatedTextures: hasAnimatedTextures ? animatedTextures : undefined,
+      hasAnimatedTextures,
+    };
   }
 
   async findByRegistryName(
@@ -196,10 +276,14 @@ export class BlocksService {
       filter.minecraftVersion,
     );
 
-    // Créer un map texturePath -> base64
+    // Créer des maps texturePath -> base64 et texturePath -> animatedGif
     const textureBase64Map = new Map<string, string>();
+    const textureAnimatedGifMap = new Map<string, string>();
     for (const tex of textures) {
       textureBase64Map.set(tex.texturePath, tex.base64);
+      if (tex.animated && tex.animatedGif) {
+        textureAnimatedGifMap.set(tex.texturePath, tex.animatedGif);
+      }
     }
 
     // Associer les données aux blocks
@@ -207,6 +291,8 @@ export class BlocksService {
       let icon: string | undefined;
       let blockTextures: Record<string, string> | undefined;
       let blockTexturesBase64: Record<string, string> | undefined;
+      let animatedTextures: Record<string, string> | undefined;
+      let hasAnimatedTextures = false;
 
       if (block.models && block.models.length > 0) {
         const modelData = modelDataMap.get(block.models[0]);
@@ -216,6 +302,8 @@ export class BlocksService {
 
           // Construire le map des textures base64 pour ce bloc
           blockTexturesBase64 = {};
+          animatedTextures = {};
+
           for (const texPath of Object.values(modelData.textures)) {
             if (
               typeof texPath === 'string' &&
@@ -223,6 +311,12 @@ export class BlocksService {
               textureBase64Map.has(texPath)
             ) {
               blockTexturesBase64[texPath] = textureBase64Map.get(texPath)!;
+
+              // Ajouter le GIF animé si disponible
+              if (textureAnimatedGifMap.has(texPath)) {
+                animatedTextures[texPath] = textureAnimatedGifMap.get(texPath)!;
+                hasAnimatedTextures = true;
+              }
             }
           }
 
@@ -249,6 +343,8 @@ export class BlocksService {
         icon,
         textures: blockTextures,
         texturesBase64: blockTexturesBase64,
+        animatedTextures: hasAnimatedTextures ? animatedTextures : undefined,
+        hasAnimatedTextures,
       };
     });
 

@@ -6,6 +6,7 @@
     <div class="navbar-links">
       <router-link to="/">Home</router-link>
       <router-link to="/blocks">Mods</router-link>
+      <router-link to="/upload" class="upload-link">Upload</router-link>
     </div>
   </nav>
 </template>
@@ -48,5 +49,15 @@ export default defineComponent({
 .navbar-links a:hover,
 .navbar-links a.router-link-exact-active {
   color: #FFAA00;
+}
+
+.upload-link {
+  background-color: #4a4;
+  border-radius: 4px;
+  padding: 5px 12px !important;
+}
+
+.upload-link:hover {
+  background-color: #5b5;
 }
 </style>

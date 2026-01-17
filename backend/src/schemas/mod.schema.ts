@@ -24,7 +24,10 @@ export class Mod {
   authors?: string[];
 
   @Prop()
-  logoUrl?: string;
+  logoFile?: string; // Chemin du logo dans le JAR
+
+  @Prop()
+  logoBase64?: string; // Logo en base64
 
   @Prop()
   websiteUrl?: string;

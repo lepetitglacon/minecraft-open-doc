@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ParserService } from './parser.service';
 import { ParserController } from './parser.controller';
 import { JarExtractorService } from './jar-extractor.service';
+import { GifGeneratorService } from './gif-generator.service';
 import { Mod, ModSchema } from '../schemas/mod.schema';
 import { Block, BlockSchema } from '../schemas/block.schema';
 import { Texture, TextureSchema } from '../schemas/texture.schema';
@@ -18,7 +19,7 @@ import { BlockModel, BlockModelSchema } from '../schemas/block-model.schema';
     ]),
   ],
   controllers: [ParserController],
-  providers: [ParserService, JarExtractorService],
-  exports: [ParserService],
+  providers: [ParserService, JarExtractorService, GifGeneratorService],
+  exports: [ParserService, GifGeneratorService],
 })
 export class ParserModule {}
