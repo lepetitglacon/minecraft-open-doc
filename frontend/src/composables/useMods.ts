@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/vue-query';
 import { computed, type Ref } from 'vue';
-import api from '../services/api';
+import { useApi } from './useApi';
 
 export interface Mod {
   _id: string;
@@ -30,6 +30,7 @@ interface UseModsOptions {
 }
 
 export function useMods(options: UseModsOptions = {}) {
+  const api = useApi();
   const { search, page, limit = 50 } = options;
 
   const queryKey = computed(() => [

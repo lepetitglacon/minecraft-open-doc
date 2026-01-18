@@ -108,12 +108,12 @@ const prevPage = () => {
   }
 };
 
-// Générer les icônes quand les données changent
-// watch(blocks, () => {
-//   if (blocks.value.length > 0) {
-//     renderIcons();
-//   }
-// }, { immediate: true });
+// Générer les icônes 3D quand les données changent
+watch(blocks, () => {
+  if (blocks.value.length > 0) {
+    renderIcons();
+  }
+}, { immediate: true });
 
 // Reset page quand namespace change
 watch(namespace, () => {

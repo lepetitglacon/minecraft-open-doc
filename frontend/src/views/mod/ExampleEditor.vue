@@ -66,8 +66,10 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useBlocks } from '../../composables/useBlocks';
 import { SceneRenderer, BlockData } from './SceneRenderer';
-import api from '../../services/api';
+import { useApi } from '../../composables/useApi';
 import { useRouter } from 'vue-router';
+
+const api = useApi();
 
 const props = defineProps<{
   namespace: string;

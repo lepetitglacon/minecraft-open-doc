@@ -38,6 +38,9 @@ export class Block {
 
   @Prop([String])
   textures?: string[]; // Referenced texture paths
+
+  @Prop()
+  icon3d?: string; // Pre-rendered 3D icon (base64 PNG)
 }
 
 export const BlockSchema = SchemaFactory.createForClass(Block);

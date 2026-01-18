@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/vue-query';
 import { computed, ref, type Ref } from 'vue';
-import api from '../services/api';
+import { useApi } from './useApi';
 import { renderBlockIconsAsync } from '../services/blockIconRenderer';
 
 // Types pour la liste (léger)
@@ -11,7 +11,9 @@ export interface BlockListItem {
   blockId: string;
   displayName?: string;
   icon?: string; // Texture de base en base64
-  renderedIcon?: string; // Icône 3D rendue
+  icon3d?: string; // Icône 3D pré-rendue par le backend
+  renderedIcon?: string; // Icône 3D rendue côté client (fallback)
+  animatedIcon?: string; // GIF animé si disponible
 }
 
 // Types pour le détail (complet)
@@ -26,6 +28,8 @@ export interface BlockDetail {
     modVersion: string;
     minecraftVersion: string;
   };
+  icon?: string;
+  icon3d?: string;
   blockstate?: unknown;
   models?: string[];
   textures?: Record<string, string>;
@@ -56,6 +60,7 @@ const renderedIconsCache = new Map<string, string>();
  * Liste des blocs avec icônes 3D (léger)
  */
 export function useBlocks(options: UseBlocksOptions) {
+  const api = useApi();
   const { namespace, search, page, limit = 100 } = options;
 
   const queryKey = computed(() => [
@@ -123,15 +128,30 @@ export function useBlocks(options: UseBlocksOptions) {
   const blocks = computed<BlockListItem[]>(() => {
     if (!query.data.value?.data) return [];
 
-    return query.data.value.data.map((block: any) => ({
-      _id: block._id,
-      registryName: block.registryName,
-      namespace: block.namespace,
-      blockId: block.blockId,
-      displayName: block.displayName,
-      icon: block.icon,
-      renderedIcon: renderedIcons.value.get(block._id) || block.icon,
-    }));
+    return query.data.value.data.map((block: any) => {
+      // Icône animée (premier GIF disponible)
+      let animatedIcon: string | undefined;
+      if (block.hasAnimatedTextures && block.animatedTextures) {
+        animatedIcon = Object.values(block.animatedTextures)[0] as string;
+      }
+
+      // Priorité: icon3d (backend) > renderedIcon (client) > icon (fallback)
+      const renderedIcon = block.icon3d
+        || renderedIcons.value.get(block._id)
+        || block.icon;
+
+      return {
+        _id: block._id,
+        registryName: block.registryName,
+        namespace: block.namespace,
+        blockId: block.blockId,
+        displayName: block.displayName,
+        icon: block.icon,
+        icon3d: block.icon3d,
+        renderedIcon,
+        animatedIcon,
+      };
+    });
   });
 
   return {
@@ -153,6 +173,7 @@ export function useBlocks(options: UseBlocksOptions) {
  * @param blockId - id du bloc (ex: "block_steel")
  */
 export function useBlock(namespace: Ref<string | null>, blockId: Ref<string | null>) {
+  const api = useApi();
   const query = useQuery({
     queryKey: computed(() => ['block', namespace.value, blockId.value]),
     queryFn: async (): Promise<BlockDetail> => {
@@ -178,6 +199,7 @@ export function useBlock(namespace: Ref<string | null>, blockId: Ref<string | nu
  * Liste des namespaces disponibles
  */
 export function useNamespaces() {
+  const api = useApi();
   return useQuery({
     queryKey: ['namespaces'],
     queryFn: async (): Promise<string[]> => {

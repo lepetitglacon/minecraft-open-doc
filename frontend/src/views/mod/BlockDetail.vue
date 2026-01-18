@@ -96,8 +96,10 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import CraftingGrid from '../../components/CraftingGrid.vue';
-import api from '../../services/api.ts';
+import { useApi } from '../../composables/useApi';
 import { renderBlockIcon } from '../../services/blockIconRenderer.ts';
+
+const api = useApi();
 
 interface Block {
   _id: string;

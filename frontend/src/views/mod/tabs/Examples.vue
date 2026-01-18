@@ -36,7 +36,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import api from '../../../services/api';
+import { useApi } from '../../../composables/useApi';
+
+const api = useApi();
 
 const props = defineProps<{
   namespace: string;

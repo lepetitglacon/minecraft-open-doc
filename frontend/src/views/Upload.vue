@@ -1,83 +1,25 @@
-<template>
-  <div class="upload-container">
-    <div class="upload-card">
-      <h1 class="upload-title">Upload Mod</h1>
-      <p class="upload-description">
-        Upload a Minecraft mod JAR file to parse its blocks and textures.
-      </p>
 
-      <div
-        class="upload-dropzone"
-        :class="{ 'dropzone-active': isDragging, 'dropzone-disabled': isUploading }"
-        @dragover.prevent="isDragging = true"
-        @dragleave.prevent="isDragging = false"
-        @drop.prevent="handleDrop"
-        @click="triggerFileInput"
-      >
-        <input
-          ref="fileInput"
-          type="file"
-          accept=".jar"
-          @change="handleFileSelect"
-          hidden
-        />
-
-        <div v-if="isUploading" class="upload-progress">
-          <div class="spinner"></div>
-          <p>Parsing {{ selectedFile?.name }}...</p>
-          <p class="upload-hint">This may take a few moments</p>
-        </div>
-
-        <div v-else-if="selectedFile" class="upload-selected">
-          <div class="file-icon">📦</div>
-          <p class="file-name">{{ selectedFile.name }}</p>
-          <p class="file-size">{{ formatFileSize(selectedFile.size) }}</p>
-          <button class="upload-btn" @click.stop="uploadFile">
-            Parse Mod
-          </button>
-          <button class="cancel-btn" @click.stop="clearSelection">
-            Cancel
-          </button>
-        </div>
-
-        <div v-else class="upload-placeholder">
-          <div class="upload-icon">📁</div>
-          <p>Drag & drop a .jar file here</p>
-          <p class="upload-hint">or click to browse</p>
-        </div>
-      </div>
-
-      <!-- Résultat -->
-      <div v-if="result" class="upload-result" :class="{ 'result-success': result.success, 'result-error': !result.success }">
-        <div v-if="result.success" class="result-content">
-          <h3>✓ {{ result.mod?.displayName || result.mod?.modId }}</h3>
-          <p>Version: {{ result.mod?.modVersion }} (MC {{ result.mod?.minecraftVersion }})</p>
-          <div class="result-stats">
-            <span>{{ result.blocksCreated }} blocks created</span>
-            <span>{{ result.blocksUpdated }} blocks updated</span>
-            <span>{{ result.texturesCreated }} textures</span>
-            <span>{{ result.modelsCreated }} models</span>
-          </div>
-          <router-link
-            v-if="result.mod?.modId"
-            :to="{ name: 'ModBlocks', params: { namespace: result.mod.modId } }"
-            class="view-mod-btn"
-          >
-            View Blocks →
-          </router-link>
-        </div>
-        <div v-else class="result-content">
-          <h3>✗ Error</h3>
-          <p>{{ result.error }}</p>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import api from '../services/api';
+import { onMounted, onUnmounted, ref } from 'vue';
+import { useApi } from '../composables/useApi';
+
+interface StepProgress {
+  current: number;
+  total: number;
+}
+
+interface StepEvent {
+  name: string;
+  status: 'pending' | 'running' | 'completed' | 'error';
+  progress?: StepProgress;
+  message?: string;
+}
+
+interface StepInfo {
+  name: string;
+  label: string;
+}
 
 interface UploadResult {
   success: boolean;
@@ -92,6 +34,7 @@ interface UploadResult {
   blocksUpdated?: number;
   texturesCreated?: number;
   modelsCreated?: number;
+  iconsGenerated?: number;
   error?: string;
 }
 
@@ -100,6 +43,38 @@ const selectedFile = ref<File | null>(null);
 const isDragging = ref(false);
 const isUploading = ref(false);
 const result = ref<UploadResult | null>(null);
+const steps = ref<StepEvent[]>([]);
+const stepInfos = ref<StepInfo[]>([]);
+let eventSource: EventSource | null = null;
+
+const fetchSteps = async () => {
+  try {
+    const api = useApi();
+    const response = await api.get<StepInfo[]>('/parser/steps');
+    stepInfos.value = response.data;
+  } catch (e) {
+    console.error('Failed to fetch steps', e);
+  }
+};
+
+const initSteps = () => {
+  steps.value = stepInfos.value.map(info => ({
+    name: info.name,
+    status: 'pending' as const,
+  }));
+};
+
+const updateStep = (event: StepEvent) => {
+  const index = steps.value.findIndex(s => s.name === event.name);
+  if (index !== -1) {
+    steps.value[index] = { ...steps.value[index], ...event };
+  }
+};
+
+const getStepLabel = (name: string): string => {
+  const info = stepInfos.value.find(s => s.name === name);
+  return info ? info.label : name;
+};
 
 const triggerFileInput = () => {
   if (!isUploading.value) {
@@ -147,35 +122,178 @@ const formatFileSize = (bytes: number): string => {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 };
 
+const setupSSE = () => {
+  if (eventSource) return;
+  
+  eventSource = new EventSource('http://localhost:3000/parser/upload');
+  
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === 'step') {
+        updateStep(data.payload);
+      }
+    } catch (e) {
+      console.error('Failed to parse SSE event', e);
+    }
+  };
+};
+
 const uploadFile = async () => {
   if (!selectedFile.value || isUploading.value) return;
 
   isUploading.value = true;
   result.value = null;
+  initSteps();
 
   try {
     const formData = new FormData();
     formData.append('file', selectedFile.value);
 
+    const api = useApi();
     const response = await api.post('/parser/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
       timeout: 300000, // 5 minutes timeout
     });
-
-    result.value = response.data;
+    
+    // Process result from response (backup if SSE missed it)
+    if (response.data) {
+       // We can rely on the response for the final result display
+    }
+    
   } catch (error: any) {
     result.value = {
       success: false,
-      error: error.response?.data?.message || error.message || 'Upload failed',
+      error: error.message || 'Upload failed',
     };
   } finally {
     isUploading.value = false;
     selectedFile.value = null;
   }
 };
+
+onMounted(() => {
+  fetchSteps();
+  setupSSE();
+});
+
+onUnmounted(() => {
+  if (eventSource) {
+    eventSource.close();
+  }
+});
 </script>
+
+<template>
+  <div class="upload-container">
+    <div class="upload-card">
+      <h1 class="upload-title">Upload Mod</h1>
+      <p class="upload-description">
+        Upload a Minecraft mod JAR file to parse its blocks and textures.
+      </p>
+
+      <div
+        class="upload-dropzone"
+        :class="{ 'dropzone-active': isDragging, 'dropzone-disabled': isUploading }"
+        @dragover.prevent="isDragging = true"
+        @dragleave.prevent="isDragging = false"
+        @drop.prevent="handleDrop"
+        @click="triggerFileInput"
+      >
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".jar"
+          @change="handleFileSelect"
+          hidden
+        />
+
+        <!-- Progress avec steps -->
+        <div v-if="isUploading" class="upload-progress">
+          <div class="progress-header">
+            <div class="spinner"></div>
+            <p>Parsing {{ selectedFile?.name }}...</p>
+          </div>
+
+          <div class="steps-list">
+            <div
+              v-for="step in steps"
+              :key="step.name"
+              class="step-item"
+              :class="{
+                'step-pending': step.status === 'pending',
+                'step-running': step.status === 'running',
+                'step-completed': step.status === 'completed',
+                'step-error': step.status === 'error',
+              }"
+            >
+              <div class="step-icon">
+                <span v-if="step.status === 'pending'">○</span>
+                <span v-else-if="step.status === 'running'" class="step-spinner">◐</span>
+                <span v-else-if="step.status === 'completed'">✓</span>
+                <span v-else>✗</span>
+              </div>
+              <div class="step-content">
+                <span class="step-name">{{ getStepLabel(step.name) }}</span>
+                <span v-if="step.progress" class="step-progress">
+                  {{ step.progress.current }}/{{ step.progress.total }}
+                </span>
+                <span v-if="step.message && step.status === 'completed'" class="step-message">
+                  {{ step.message }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="selectedFile" class="upload-selected">
+          <div class="file-icon">📦</div>
+          <p class="file-name">{{ selectedFile.name }}</p>
+          <p class="file-size">{{ formatFileSize(selectedFile.size) }}</p>
+          <button class="upload-btn" @click.stop="uploadFile">
+            Parse Mod
+          </button>
+          <button class="cancel-btn" @click.stop="clearSelection">
+            Cancel
+          </button>
+        </div>
+
+        <div v-else class="upload-placeholder">
+          <div class="upload-icon">📁</div>
+          <p>Drag & drop a .jar file here</p>
+          <p class="upload-hint">or click to browse</p>
+        </div>
+      </div>
+
+      <!-- Résultat -->
+      <div v-if="result" class="upload-result" :class="{ 'result-success': result.success, 'result-error': !result.success }">
+        <div v-if="result.success" class="result-content">
+          <h3>✓ {{ result.mod?.displayName || result.mod?.modId }}</h3>
+          <p>Version: {{ result.mod?.modVersion }} (MC {{ result.mod?.minecraftVersion }})</p>
+          <div class="result-stats">
+            <span>{{ result.blocksCreated }} blocks</span>
+            <span>{{ result.texturesCreated }} textures</span>
+            <span>{{ result.modelsCreated }} models</span>
+            <span>{{ result.iconsGenerated }} icons</span>
+          </div>
+          <router-link
+            v-if="result.mod?.modId"
+            :to="{ name: 'ModBlocks', params: { namespace: result.mod.modId } }"
+            class="view-mod-btn"
+          >
+            View Blocks →
+          </router-link>
+        </div>
+        <div v-else class="result-content">
+          <h3>✗ Error</h3>
+          <p>{{ result.error }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .upload-container {
@@ -229,17 +347,33 @@ const uploadFile = async () => {
 }
 
 .dropzone-disabled {
-  cursor: wait;
-  opacity: 0.7;
+  cursor: default;
 }
 
 .upload-placeholder,
-.upload-selected,
-.upload-progress {
+.upload-selected {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
+}
+
+.upload-progress {
+  text-align: left;
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  justify-content: center;
+}
+
+.progress-header p {
+  color: #fff;
+  margin: 0;
+  font-size: 14px;
 }
 
 .upload-icon,
@@ -248,8 +382,7 @@ const uploadFile = async () => {
   margin-bottom: 8px;
 }
 
-.upload-placeholder p,
-.upload-progress p {
+.upload-placeholder p {
   color: #aaa;
   margin: 0;
 }
@@ -272,6 +405,85 @@ const uploadFile = async () => {
   margin: 0;
 }
 
+/* Steps */
+.steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: #222;
+  transition: all 0.2s;
+}
+
+.step-pending {
+  opacity: 0.5;
+}
+
+.step-running {
+  background-color: #2a2a1a;
+  border-left: 3px solid #ffaa00;
+}
+
+.step-completed {
+  background-color: #1a2a1a;
+}
+
+.step-error {
+  background-color: #2a1a1a;
+  border-left: 3px solid #a44;
+}
+
+.step-icon {
+  width: 20px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.step-pending .step-icon { color: #555; }
+.step-running .step-icon { color: #ffaa00; }
+.step-completed .step-icon { color: #4a4; }
+.step-error .step-icon { color: #a44; }
+
+.step-spinner {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+.step-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.step-name {
+  color: #ccc;
+  font-size: 13px;
+}
+
+.step-progress {
+  color: #888;
+  font-size: 11px;
+  background-color: #333;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.step-message {
+  color: #666;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+/* Buttons */
 .upload-btn,
 .cancel-btn,
 .view-mod-btn {
@@ -318,13 +530,12 @@ const uploadFile = async () => {
 
 /* Spinner */
 .spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #333;
+  width: 24px;
+  height: 24px;
+  border: 3px solid #333;
   border-top-color: #ffaa00;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin-bottom: 16px;
 }
 
 @keyframes spin {
