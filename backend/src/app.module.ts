@@ -8,6 +8,7 @@ import { TexturesModule } from './textures/textures.module';
 import { ModelsModule } from './models/models.module';
 import { RecipesModule } from './recipes/recipes.module';
 import { ModsModule } from './mods/mods.module';
+import { ExamplesModule } from './examples/examples.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ModsModule } from './mods/mods.module';
     ModelsModule,
     RecipesModule,
     ModsModule,
+    ExamplesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

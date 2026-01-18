@@ -1,7 +1,5 @@
 <template>
   <div class="block-detail">
-    <Breadcrumb />
-
     <div v-if="isLoading" class="loading">Loading...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="block" class="block-content">
@@ -97,7 +95,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
-import Breadcrumb from '../components/Breadcrumb.vue';
 import CraftingGrid from '../components/CraftingGrid.vue';
 import api from '../services/api';
 import { renderBlockIcon } from '../services/blockIconRenderer';

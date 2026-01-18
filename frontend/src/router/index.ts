@@ -9,14 +9,15 @@ const routes: RouteRecordRaw[] = [
     component: Home
   },
   {
-    path: '/blocks',
-    name: 'Mods',
-    component: Blocks
-  },
-  {
     path: '/upload',
     name: 'Upload',
     component: () => import('../views/Upload.vue')
+  },
+  {
+    path: '/mods/:namespace/examples/create',
+    name: 'CreateExample',
+    component: () => import('../views/mod/ExampleEditor.vue'),
+    props: true
   },
   {
     path: '/mods/:namespace',

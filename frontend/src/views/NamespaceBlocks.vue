@@ -1,7 +1,5 @@
 <template>
   <div class="jei-container">
-    <Breadcrumb />
-
     <div class="jei-header">
       <input
         type="text"
@@ -37,10 +35,10 @@
               loading="lazy"
             />
           </template>
-          <!-- Icône statique (rendu 3D ou fallback) -->
-          <template v-else-if="block.renderedIcon">
+          <!-- Icône statique (rendu 3D ou icon fallback) -->
+          <template v-else-if="block.renderedIcon || block.icon">
             <img
-              :src="block.renderedIcon"
+              :src="block.renderedIcon || block.icon"
               :alt="block.blockId"
               class="jei-icon"
               loading="lazy"
@@ -69,7 +67,6 @@ import { ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBlocks } from '../composables/useBlocks';
 import { debounce } from 'lodash-es';
-import Breadcrumb from '../components/Breadcrumb.vue';
 
 const route = useRoute();
 const namespace = computed(() => route.params.namespace as string);

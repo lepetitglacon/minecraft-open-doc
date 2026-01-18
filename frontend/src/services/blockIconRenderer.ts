@@ -233,10 +233,12 @@ export async function renderBlockIconsAsync(
 }
 
 /**
- * Vide le cache des icônes
+ * Vide le cache des icônes et dispose des textures Three.js
  */
 export function clearIconCache() {
   iconCache.clear();
+  textureCache.forEach(t => t.dispose());
+  textureCache.clear();
 }
 
 /**

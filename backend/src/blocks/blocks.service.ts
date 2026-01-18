@@ -229,6 +229,7 @@ export class BlocksService {
   async findAllWithIcons(
     filter: BlockFilter = {},
     pagination: PaginationOptions = {},
+    withTextures = false,
   ): Promise<PaginatedResult<BlockWithIcon>> {
     const result = await this.findAll(filter, pagination);
 
@@ -300,23 +301,30 @@ export class BlocksService {
         if (modelData) {
           blockTextures = modelData.textures;
 
-          // Construire le map des textures base64 pour ce bloc
-          blockTexturesBase64 = {};
-          animatedTextures = {};
+          // Construire le map des textures base64 pour ce bloc (seulement si demandé)
+          if (withTextures) {
+            blockTexturesBase64 = {};
+            for (const texPath of Object.values(modelData.textures)) {
+              if (
+                typeof texPath === 'string' &&
+                !texPath.startsWith('#') &&
+                textureBase64Map.has(texPath)
+              ) {
+                blockTexturesBase64[texPath] = textureBase64Map.get(texPath)!;
+              }
+            }
+          }
 
+          // Toujours collecter les GIFs animés si présents
+          animatedTextures = {};
           for (const texPath of Object.values(modelData.textures)) {
             if (
               typeof texPath === 'string' &&
               !texPath.startsWith('#') &&
-              textureBase64Map.has(texPath)
+              textureAnimatedGifMap.has(texPath)
             ) {
-              blockTexturesBase64[texPath] = textureBase64Map.get(texPath)!;
-
-              // Ajouter le GIF animé si disponible
-              if (textureAnimatedGifMap.has(texPath)) {
-                animatedTextures[texPath] = textureAnimatedGifMap.get(texPath)!;
-                hasAnimatedTextures = true;
-              }
+              animatedTextures[texPath] = textureAnimatedGifMap.get(texPath)!;
+              hasAnimatedTextures = true;
             }
           }
 
@@ -325,9 +333,9 @@ export class BlocksService {
             icon = textureBase64Map.get(modelData.resolvedTextures[0]);
           } else {
             // Prendre la première texture disponible
-            const firstBase64 = Object.values(blockTexturesBase64)[0];
-            if (firstBase64) {
-              icon = firstBase64;
+            const firstPath = Object.values(modelData.textures).find(t => typeof t === 'string' && !t.startsWith('#'));
+            if (firstPath && textureBase64Map.has(firstPath)) {
+              icon = textureBase64Map.get(firstPath);
             }
           }
         }

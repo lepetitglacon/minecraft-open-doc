@@ -2,6 +2,7 @@
   <div id="app">
     <Navbar />
     <main>
+      <Breadcrumb />
       <router-view />
     </main>
   </div>
@@ -10,11 +11,13 @@
 <script lang="ts">
 import { defineComponent } from 'vue'
 import Navbar from './components/Navbar.vue'
+import Breadcrumb from './components/Breadcrumb.vue'
 
 export default defineComponent({
   name: 'App',
   components: {
-    Navbar
+    Navbar,
+    Breadcrumb
   }
 })
 </script>

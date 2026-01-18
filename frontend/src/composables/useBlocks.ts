@@ -34,13 +34,14 @@ interface UseBlocksOptions {
   search?: Ref<string>;
   page?: Ref<number>;
   limit?: number;
+  withTextures?: boolean;
 }
 
 // Cache des icônes rendues par blockId
 const renderedIconsCache = new Map<string, string>();
 
 export function useBlocks(options: UseBlocksOptions) {
-  const { namespace, search, page, limit = 100 } = options;
+  const { namespace, search, page, limit = 100, withTextures = false } = options;
 
   const queryKey = computed(() => [
     'blocks',
@@ -48,6 +49,7 @@ export function useBlocks(options: UseBlocksOptions) {
     search?.value || '',
     page?.value || 1,
     limit,
+    withTextures,
   ]);
 
   const query = useQuery({
@@ -60,6 +62,7 @@ export function useBlocks(options: UseBlocksOptions) {
           page: page?.value || 1,
           limit,
           withIcons: 'true',
+          withTextures: withTextures ? 'true' : 'false',
         },
       });
       return response.data;

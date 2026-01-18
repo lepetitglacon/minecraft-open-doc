@@ -5,7 +5,6 @@
     </div>
     <div class="navbar-links">
       <router-link to="/">Home</router-link>
-      <router-link to="/blocks">Mods</router-link>
       <router-link to="/upload" class="upload-link">Upload</router-link>
     </div>
   </nav>

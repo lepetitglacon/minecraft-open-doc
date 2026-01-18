@@ -14,6 +14,7 @@ export class BlocksController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('withIcons') withIcons?: string,
+    @Query('withTextures') withTextures?: string,
   ) {
     const filter: BlockFilter = {};
     if (namespace) filter.namespace = namespace;
@@ -26,7 +27,11 @@ export class BlocksController {
     if (limit) pagination.limit = Math.min(parseInt(limit, 10), 100);
 
     if (withIcons === 'true') {
-      return this.blocksService.findAllWithIcons(filter, pagination);
+      return this.blocksService.findAllWithIcons(
+        filter,
+        pagination,
+        withTextures === 'true',
+      );
     }
 
     return this.blocksService.findAll(filter, pagination);
