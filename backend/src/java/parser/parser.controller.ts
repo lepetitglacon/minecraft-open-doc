@@ -78,11 +78,6 @@ export class ParserController {
     }
   }
 
-  @OnEvent('upload/*')
-  test(e) {
-    // console.log('event', e)
-  }
-
   @Sse('upload')
   uploadSse(): Observable<MessageEvent> {
     return merge(

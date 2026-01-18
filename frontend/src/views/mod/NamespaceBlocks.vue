@@ -1,3 +1,57 @@
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import { useBlocks } from '../../composables/useBlocks.ts';
+import { debounce } from 'lodash-es';
+
+const route = useRoute();
+const namespace = computed(() => route.params.namespace as string);
+
+const searchInput = ref('');
+const search = ref('');
+const page = ref(1);
+
+const {
+  blocks,
+  total,
+  totalPages,
+  isLoading,
+  error,
+  renderIcons,
+} = useBlocks({
+  namespace,
+  search,
+  page,
+  limit: 100,
+});
+
+// Debounce search
+const handleSearch = debounce(() => {
+  search.value = searchInput.value;
+  page.value = 1;
+}, 300);
+
+// Navigation
+const nextPage = () => {
+  if (page.value < totalPages.value) {
+    page.value++;
+  }
+};
+
+const prevPage = () => {
+  if (page.value > 1) {
+    page.value--;
+  }
+};
+
+// Reset page quand namespace change
+watch(namespace, () => {
+  page.value = 1;
+  searchInput.value = '';
+  search.value = '';
+});
+</script>
+
 <template>
   <div class="jei-container">
     <div class="jei-header">
@@ -61,67 +115,6 @@
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-import { ref, computed, watch } from 'vue';
-import { useRoute } from 'vue-router';
-import { useBlocks } from '../../composables/useBlocks.ts';
-import { debounce } from 'lodash-es';
-
-const route = useRoute();
-const namespace = computed(() => route.params.namespace as string);
-
-const searchInput = ref('');
-const search = ref('');
-const page = ref(1);
-
-const {
-  blocks,
-  total,
-  totalPages,
-  isLoading,
-  error,
-  renderIcons,
-} = useBlocks({
-  namespace,
-  search,
-  page,
-  limit: 100,
-});
-
-// Debounce search
-const handleSearch = debounce(() => {
-  search.value = searchInput.value;
-  page.value = 1;
-}, 300);
-
-// Navigation
-const nextPage = () => {
-  if (page.value < totalPages.value) {
-    page.value++;
-  }
-};
-
-const prevPage = () => {
-  if (page.value > 1) {
-    page.value--;
-  }
-};
-
-// Générer les icônes 3D quand les données changent
-watch(blocks, () => {
-  if (blocks.value.length > 0) {
-    renderIcons();
-  }
-}, { immediate: true });
-
-// Reset page quand namespace change
-watch(namespace, () => {
-  page.value = 1;
-  searchInput.value = '';
-  search.value = '';
-});
-</script>
 
 <style scoped>
 .jei-container {

@@ -130,8 +130,12 @@ const setupSSE = () => {
   eventSource.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      console.log(data)
       if (data.type === 'step') {
         updateStep(data.payload);
+      }
+      if (data.type === 'complete') {
+        result.value = data.payload
       }
     } catch (e) {
       console.error('Failed to parse SSE event', e);
@@ -145,10 +149,12 @@ const uploadFile = async () => {
   isUploading.value = true;
   result.value = null;
   initSteps();
+    setupSSE();
 
   try {
     const formData = new FormData();
     formData.append('file', selectedFile.value);
+
 
     const api = useApi();
     const response = await api.post('/parser/upload', formData, {
@@ -160,7 +166,7 @@ const uploadFile = async () => {
     
     // Process result from response (backup if SSE missed it)
     if (response.data) {
-       // We can rely on the response for the final result display
+       result.value = response.data;
     }
     
   } catch (error: any) {
@@ -176,7 +182,6 @@ const uploadFile = async () => {
 
 onMounted(() => {
   fetchSteps();
-  setupSSE();
 });
 
 onUnmounted(() => {
@@ -280,10 +285,10 @@ onUnmounted(() => {
           </div>
           <router-link
             v-if="result.mod?.modId"
-            :to="{ name: 'ModBlocks', params: { namespace: result.mod.modId } }"
+            :to="{ name: 'ModGuide', params: { namespace: result.mod.modId } }"
             class="view-mod-btn"
           >
-            View Blocks →
+            View Mod →
           </router-link>
         </div>
         <div v-else class="result-content">
