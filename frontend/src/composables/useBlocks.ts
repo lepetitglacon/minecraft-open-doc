@@ -3,7 +3,19 @@ import { computed, ref, type Ref } from 'vue';
 import api from '../services/api';
 import { renderBlockIconsAsync } from '../services/blockIconRenderer';
 
-interface Block {
+// Types pour la liste (léger)
+export interface BlockListItem {
+  _id: string;
+  registryName: string;
+  namespace: string;
+  blockId: string;
+  displayName?: string;
+  icon?: string; // Texture de base en base64
+  renderedIcon?: string; // Icône 3D rendue
+}
+
+// Types pour le détail (complet)
+export interface BlockDetail {
   _id: string;
   registryName: string;
   namespace: string;
@@ -14,15 +26,16 @@ interface Block {
     modVersion: string;
     minecraftVersion: string;
   };
-  icon?: string;
+  blockstate?: unknown;
+  models?: string[];
   textures?: Record<string, string>;
   texturesBase64?: Record<string, string>;
-  animatedTextures?: Record<string, string>; // GIFs animés
+  animatedTextures?: Record<string, string>;
   hasAnimatedTextures?: boolean;
 }
 
 interface BlocksResponse {
-  data: Block[];
+  data: BlockListItem[];
   total: number;
   page: number;
   limit: number;
@@ -34,14 +47,16 @@ interface UseBlocksOptions {
   search?: Ref<string>;
   page?: Ref<number>;
   limit?: number;
-  withTextures?: boolean;
 }
 
-// Cache des icônes rendues par blockId
+// Cache des icônes 3D rendues
 const renderedIconsCache = new Map<string, string>();
 
+/**
+ * Liste des blocs avec icônes 3D (léger)
+ */
 export function useBlocks(options: UseBlocksOptions) {
-  const { namespace, search, page, limit = 100, withTextures = false } = options;
+  const { namespace, search, page, limit = 100 } = options;
 
   const queryKey = computed(() => [
     'blocks',
@@ -49,7 +64,6 @@ export function useBlocks(options: UseBlocksOptions) {
     search?.value || '',
     page?.value || 1,
     limit,
-    withTextures,
   ]);
 
   const query = useQuery({
@@ -62,7 +76,7 @@ export function useBlocks(options: UseBlocksOptions) {
           page: page?.value || 1,
           limit,
           withIcons: 'true',
-          withTextures: withTextures ? 'true' : 'false',
+          withTextures: 'true', // Nécessaire pour le rendu 3D
         },
       });
       return response.data;
@@ -70,34 +84,29 @@ export function useBlocks(options: UseBlocksOptions) {
     enabled: computed(() => !!namespace.value),
   });
 
-  // Icônes rendues (générées de manière asynchrone)
+  // Icônes 3D rendues
   const renderedIcons = ref<Map<string, string>>(new Map());
   const isRenderingIcons = ref(false);
 
-  // Quand les données changent, générer les icônes 3D
+  // Générer les icônes 3D quand les données arrivent
   const renderIcons = async () => {
     if (!query.data.value?.data) return;
 
     isRenderingIcons.value = true;
 
-    const blocksToRender = query.data.value.data.filter((block) => {
-      // Ne pas re-rendre si déjà en cache
-      if (renderedIconsCache.has(block._id)) {
-        return false;
-      }
+    const blocksToRender = query.data.value.data.filter((block: any) => {
+      if (renderedIconsCache.has(block._id)) return false;
       return block.textures && block.texturesBase64;
     });
 
     if (blocksToRender.length > 0) {
       const icons = await renderBlockIconsAsync(blocksToRender);
-
-      // Mettre à jour le cache global
       icons.forEach((icon, blockId) => {
         renderedIconsCache.set(blockId, icon);
       });
     }
 
-    // Construire le map des icônes pour cette page
+    // Construire le map des icônes
     const iconsMap = new Map<string, string>();
     for (const block of query.data.value.data) {
       const cached = renderedIconsCache.get(block._id);
@@ -111,49 +120,63 @@ export function useBlocks(options: UseBlocksOptions) {
   };
 
   // Blocs avec icônes rendues
-  const blocksWithRenderedIcons = computed(() => {
+  const blocks = computed<BlockListItem[]>(() => {
     if (!query.data.value?.data) return [];
 
-    return query.data.value.data.map((block) => {
-      // Pour les blocs avec textures animées, utiliser le premier GIF disponible
-      let animatedIcon: string | undefined;
-      if (block.hasAnimatedTextures && block.animatedTextures) {
-        const firstGif = Object.values(block.animatedTextures)[0];
-        if (firstGif) {
-          animatedIcon = firstGif;
-        }
-      }
-
-      return {
-        ...block,
-        renderedIcon: renderedIcons.value.get(block._id) || block.icon,
-        animatedIcon, // GIF animé si disponible
-      };
-    });
+    return query.data.value.data.map((block: any) => ({
+      _id: block._id,
+      registryName: block.registryName,
+      namespace: block.namespace,
+      blockId: block.blockId,
+      displayName: block.displayName,
+      icon: block.icon,
+      renderedIcon: renderedIcons.value.get(block._id) || block.icon,
+    }));
   });
 
   return {
-    // Query state
-    data: query.data,
+    blocks,
+    total: computed(() => query.data.value?.total || 0),
+    totalPages: computed(() => query.data.value?.pages || 1),
     isLoading: query.isLoading,
     isFetching: query.isFetching,
     error: query.error,
-
-    // Données transformées
-    blocks: blocksWithRenderedIcons,
-    total: computed(() => query.data.value?.total || 0),
-    totalPages: computed(() => query.data.value?.pages || 1),
-
-    // Rendu des icônes
     renderIcons,
     isRenderingIcons,
-    renderedIcons,
-
-    // Refetch
     refetch: query.refetch,
   };
 }
 
+/**
+ * Détail d'un bloc (complet avec modèles et textures)
+ * @param namespace - namespace du bloc (ex: "mekanism")
+ * @param blockId - id du bloc (ex: "block_steel")
+ */
+export function useBlock(namespace: Ref<string | null>, blockId: Ref<string | null>) {
+  const query = useQuery({
+    queryKey: computed(() => ['block', namespace.value, blockId.value]),
+    queryFn: async (): Promise<BlockDetail> => {
+      const response = await api.get(`/blocks/${namespace.value}/${blockId.value}`, {
+        params: {
+          withIcons: 'true',
+        },
+      });
+      return response.data;
+    },
+    enabled: computed(() => !!namespace.value && !!blockId.value),
+  });
+
+  return {
+    block: computed(() => query.data.value || null),
+    isLoading: query.isLoading,
+    error: query.error,
+    refetch: query.refetch,
+  };
+}
+
+/**
+ * Liste des namespaces disponibles
+ */
 export function useNamespaces() {
   return useQuery({
     queryKey: ['namespaces'],
@@ -161,6 +184,6 @@ export function useNamespaces() {
       const response = await api.get('/blocks/namespaces');
       return response.data;
     },
-    staleTime: 1000 * 60 * 10, // 10 minutes
+    staleTime: 1000 * 60 * 10,
   });
 }

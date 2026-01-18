@@ -14,44 +14,52 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/Upload.vue')
   },
   {
-    path: '/mods/:namespace/examples/create',
-    name: 'CreateExample',
-    component: () => import('../views/mod/ExampleEditor.vue'),
-    props: true
-  },
-  {
-    path: '/mods/:namespace',
-    name: 'ModDetail',
-    component: () => import('../views/mod/ModDetail.vue'),
-    props: true,
+    path: '/mods',
+    name: 'Mods',
+    // Component wrapper to allow children rendering
+    component: { template: '<router-view />' },
     children: [
       {
-        path: '',
-        redirect: to => ({ name: 'ModGuide', params: { namespace: to.params.namespace as string }})
-      },
-      {
-        path: 'guide',
-        name: 'ModGuide',
-        component: () => import('../views/mod/tabs/Guide.vue'),
+        path: ':namespace/examples/create',
+        name: 'CreateExample',
+        component: () => import('../views/mod/ExampleEditor.vue'),
         props: true
       },
       {
-        path: 'blocks',
-        name: 'ModBlocks',
-        component: () => import('../views/NamespaceBlocks.vue'),
-        props: true
-      },
-      {
-        path: 'blocks/:blockId',
-        name: 'BlockDetail',
-        component: () => import('../views/BlockDetail.vue'),
-        props: true
-      },
-      {
-        path: 'examples',
-        name: 'ModExamples',
-        component: () => import('../views/mod/tabs/Examples.vue'),
-        props: true
+        path: ':namespace',
+        name: 'ModDetail',
+        component: () => import('../views/mod/ModDetail.vue'),
+        props: true,
+        children: [
+          {
+            path: '',
+            redirect: to => ({ name: 'ModGuide', params: { namespace: to.params.namespace as string }})
+          },
+          {
+            path: 'guide',
+            name: 'ModGuide',
+            component: () => import('../views/mod/tabs/Guide.vue'),
+            props: true
+          },
+          {
+            path: 'blocks',
+            name: 'ModBlocks',
+            component: () => import('../views/mod/NamespaceBlocks.vue'),
+            props: true
+          },
+          {
+            path: 'blocks/:blockId',
+            name: 'BlockDetail',
+            component: () => import('../views/mod/BlockDetail.vue'),
+            props: true
+          },
+          {
+            path: 'examples',
+            name: 'ModExamples',
+            component: () => import('../views/mod/tabs/Examples.vue'),
+            props: true
+          }
+        ]
       }
     ]
   }

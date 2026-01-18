@@ -95,9 +95,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
-import CraftingGrid from '../components/CraftingGrid.vue';
-import api from '../services/api';
-import { renderBlockIcon } from '../services/blockIconRenderer';
+import CraftingGrid from '../../components/CraftingGrid.vue';
+import api from '../../services/api.ts';
+import { renderBlockIcon } from '../../services/blockIconRenderer.ts';
 
 interface Block {
   _id: string;

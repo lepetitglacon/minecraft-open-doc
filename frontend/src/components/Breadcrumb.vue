@@ -1,8 +1,42 @@
+<script setup lang="ts">
+import { computed } from 'vue';
+import { useRoute } from 'vue-router';
+
+interface Crumb {
+  label: string;
+  path?: string;
+}
+
+const route = useRoute();
+
+const crumbs = computed<Crumb[]>(() => {
+  const segments = route.path.split('/').filter(Boolean);
+
+  if (segments.length === 0) {
+    return [{ label: 'Home' }];
+  }
+
+  const result: Crumb[] = [{ label: 'Home', path: '/' }];
+
+  let currentPath = '';
+  segments.forEach((segment, index) => {
+    currentPath += '/' + segment;
+    const isLast = index === segments.length - 1;
+    result.push({
+      label: segment,
+      path: isLast ? undefined : currentPath
+    });
+  });
+
+  return result;
+});
+</script>
+
 <template>
   <nav class="breadcrumb">
     <ol>
       <li v-for="(crumb, index) in crumbs" :key="index">
-        <router-link v-if="crumb.to" :to="crumb.to" class="breadcrumb-link">
+        <router-link v-if="crumb.path" :to="crumb.path" class="breadcrumb-link">
           {{ crumb.label }}
         </router-link>
         <span v-else class="breadcrumb-current">{{ crumb.label }}</span>
@@ -11,42 +45,6 @@
     </ol>
   </nav>
 </template>
-
-<script setup lang="ts">
-import { computed } from 'vue';
-import { useRoute } from 'vue-router';
-
-interface Crumb {
-  label: string;
-  to?: { name: string; params?: Record<string, string> };
-}
-
-const route = useRoute();
-
-const crumbs = computed<Crumb[]>(() => {
-  const result: Crumb[] = [
-    { label: 'Home', to: { name: 'Home' } }
-  ];
-
-  const namespace = route.params.namespace as string | undefined;
-  const blockId = route.params.blockId as string | undefined;
-
-  if (namespace) {
-    result.push({
-      label: namespace.charAt(0).toUpperCase() + namespace.slice(1),
-      to: blockId ? { name: 'ModBlocks', params: { namespace } } : undefined
-    });
-  }
-
-  if (blockId) {
-    result.push({
-      label: blockId.replace(/_/g, ' ')
-    });
-  }
-
-  return result;
-});
-</script>
 
 <style scoped>
 .breadcrumb {

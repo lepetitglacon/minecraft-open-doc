@@ -65,7 +65,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { useBlocks } from '../composables/useBlocks';
+import { useBlocks } from '../../composables/useBlocks.ts';
 import { debounce } from 'lodash-es';
 
 const route = useRoute();
@@ -109,11 +109,11 @@ const prevPage = () => {
 };
 
 // Générer les icônes quand les données changent
-watch(blocks, () => {
-  if (blocks.value.length > 0) {
-    renderIcons();
-  }
-}, { immediate: true });
+// watch(blocks, () => {
+//   if (blocks.value.length > 0) {
+//     renderIcons();
+//   }
+// }, { immediate: true });
 
 // Reset page quand namespace change
 watch(namespace, () => {
