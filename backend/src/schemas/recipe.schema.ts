@@ -34,7 +34,9 @@ export class Recipe {
   key?: Record<string, { item?: string; tag?: string }>; // Pour shaped crafting
 
   @Prop({ type: Array })
-  ingredients?: Array<{ item?: string; tag?: string } | Array<{ item?: string; tag?: string }>>; // Pour shapeless
+  ingredients?: Array<
+    { item?: string; tag?: string } | Array<{ item?: string; tag?: string }>
+  >; // Pour shapeless
 
   @Prop({ type: Object, required: true })
   result: {
@@ -53,4 +55,7 @@ export const RecipeSchema = SchemaFactory.createForClass(Recipe);
 
 // Index pour rechercher les recettes par résultat
 RecipeSchema.index({ 'result.item': 1 });
-RecipeSchema.index({ recipeId: 1, 'mod.modVersion': 1, 'mod.minecraftVersion': 1 }, { unique: true });
+RecipeSchema.index(
+  { recipeId: 1, 'mod.modVersion': 1, 'mod.minecraftVersion': 1 },
+  { unique: true },
+);

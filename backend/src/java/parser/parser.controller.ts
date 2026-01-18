@@ -3,16 +3,18 @@ import {
   Post,
   UploadedFile,
   BadRequestException,
-  Res, Sse, Get,
+  Res,
+  Sse,
+  Get,
 } from '@nestjs/common';
 import { ParserService, StepEvent } from './parser.service';
 import type { Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
-import {JarFileInterceptor} from "./decorator/JarFileInterceptor";
-import {fromEvent, map, merge, Observable} from "rxjs";
-import {EventEmitter2} from "eventemitter2";
-import {OnEvent} from "@nestjs/event-emitter";
+import { JarFileInterceptor } from './decorator/JarFileInterceptor';
+import { fromEvent, map, merge, Observable } from 'rxjs';
+import { EventEmitter2 } from 'eventemitter2';
+import { OnEvent } from '@nestjs/event-emitter';
 
 // Dossier pour les uploads temporaires
 export const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
@@ -25,8 +27,8 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 @Controller('parser')
 export class ParserController {
   constructor(
-      private readonly parserService: ParserService,
-      private readonly eventEmitter: EventEmitter2
+    private readonly parserService: ParserService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   @Get('steps')
@@ -45,10 +47,13 @@ export class ParserController {
     }
 
     try {
-      const result = await this.parserService.parseJar(file.path, (step: StepEvent) => {
-        // console.log('step', step);
-        this.eventEmitter.emit('upload/step', step);
-      });
+      const result = await this.parserService.parseJar(
+        file.path,
+        (step: StepEvent) => {
+          // console.log('step', step);
+          this.eventEmitter.emit('upload/step', step);
+        },
+      );
 
       this.eventEmitter.emit('upload/complete', {
         success: true,
@@ -67,8 +72,8 @@ export class ParserController {
       });
     } catch (error) {
       this.eventEmitter.emit('upload/error', {
-        error: error.message
-      })
+        error: error.message,
+      });
 
       if (fs.existsSync(file.path)) {
         fs.unlinkSync(file.path);
@@ -81,13 +86,22 @@ export class ParserController {
   @Sse('upload')
   uploadSse(): Observable<MessageEvent> {
     return merge(
-      fromEvent(this.eventEmitter, 'upload/step').pipe(map((payload: any) => ({ type: 'step', payload }))),
-      fromEvent(this.eventEmitter, 'upload/complete').pipe(map((payload: any) => ({ type: 'complete', payload }))),
-      fromEvent(this.eventEmitter, 'upload/error').pipe(map((payload: any) => ({ type: 'error', payload })))
+      fromEvent(this.eventEmitter, 'upload/step').pipe(
+        map((payload: any) => ({ type: 'step', payload })),
+      ),
+      fromEvent(this.eventEmitter, 'upload/complete').pipe(
+        map((payload: any) => ({ type: 'complete', payload })),
+      ),
+      fromEvent(this.eventEmitter, 'upload/error').pipe(
+        map((payload: any) => ({ type: 'error', payload })),
+      ),
     ).pipe(
-      map((event) => ({
-        data: event,
-      } as MessageEvent)),
+      map(
+        (event) =>
+          ({
+            data: event,
+          }) as MessageEvent,
+      ),
     );
   }
 }

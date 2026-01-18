@@ -106,22 +106,32 @@ export class JarExtractorService {
 
     // Extract logo as base64 if specified
     if (metadata.logoFile) {
-      const logoEntry = this.findLogoFile(entries, metadata.logoFile, metadata.modId);
+      const logoEntry = this.findLogoFile(
+        entries,
+        metadata.logoFile,
+        metadata.modId,
+      );
 
       if (logoEntry) {
         try {
           const buffer = zip.readFile(logoEntry);
           if (buffer) {
-            const ext = logoEntry.entryName.split('.').pop()?.toLowerCase() || 'png';
-            const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+            const ext =
+              logoEntry.entryName.split('.').pop()?.toLowerCase() || 'png';
+            const mimeType =
+              ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
             metadata.logoBase64 = `data:${mimeType};base64,${buffer.toString('base64')}`;
-            this.logger.log(`Extracted logo for ${metadata.modId} from ${logoEntry.entryName} (${Math.round(metadata.logoBase64.length / 1024)}KB)`);
+            this.logger.log(
+              `Extracted logo for ${metadata.modId} from ${logoEntry.entryName} (${Math.round(metadata.logoBase64.length / 1024)}KB)`,
+            );
           }
         } catch (error) {
           this.logger.warn(`Failed to extract logo: ${metadata.logoFile}`);
         }
       } else {
-        this.logger.warn(`Logo file specified but not found in JAR: ${metadata.logoFile}`);
+        this.logger.warn(
+          `Logo file specified but not found in JAR: ${metadata.logoFile}`,
+        );
       }
     }
 
@@ -133,7 +143,10 @@ export class JarExtractorService {
     logoPath: string,
     modId: string,
   ): AdmZip.IZipEntry | undefined {
-    const cleanPath = logoPath.trim().replace(/\\/g, '/').replace(/^(\.\/|\/)+/, '');
+    const cleanPath = logoPath
+      .trim()
+      .replace(/\\/g, '/')
+      .replace(/^(\.\/|\/)+/, '');
 
     // 1. Try exact path
     let entry = entries.find((e) => e.entryName === cleanPath);

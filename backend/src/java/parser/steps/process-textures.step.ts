@@ -17,7 +17,10 @@ export interface ProcessTexturesOutput {
   texturesBase64Map: Map<string, string>;
 }
 
-export class ProcessTexturesStep extends ParseStep<ProcessTexturesInput, ProcessTexturesOutput> {
+export class ProcessTexturesStep extends ParseStep<
+  ProcessTexturesInput,
+  ProcessTexturesOutput
+> {
   readonly name = 'process-textures';
 
   constructor(

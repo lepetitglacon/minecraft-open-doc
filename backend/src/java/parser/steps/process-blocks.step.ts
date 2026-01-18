@@ -16,7 +16,10 @@ export interface ProcessBlocksOutput {
   blocksUpdated: number;
 }
 
-export class ProcessBlocksStep extends ParseStep<ProcessBlocksInput, ProcessBlocksOutput> {
+export class ProcessBlocksStep extends ParseStep<
+  ProcessBlocksInput,
+  ProcessBlocksOutput
+> {
   readonly name = 'process-blocks';
 
   constructor(private readonly blockModel: Model<Block>) {
@@ -24,7 +27,8 @@ export class ProcessBlocksStep extends ParseStep<ProcessBlocksInput, ProcessBloc
   }
 
   async execute(input: ProcessBlocksInput): Promise<ProcessBlocksOutput> {
-    const { blockstates, translations, modId, modVersion, minecraftVersion } = input;
+    const { blockstates, translations, modId, modVersion, minecraftVersion } =
+      input;
 
     this.progress(0, blockstates.length);
 
@@ -36,6 +40,7 @@ export class ProcessBlocksStep extends ParseStep<ProcessBlocksInput, ProcessBloc
       const registryName = `${modId}:${bs.blockId}`;
       const displayName = translations[bs.blockId] || bs.blockId;
       const models = this.extractModelReferences(bs.blockstate);
+      const type = models.length > 0 ? models[0] : undefined;
 
       const result = await this.blockModel.updateOne(
         {
@@ -52,6 +57,7 @@ export class ProcessBlocksStep extends ParseStep<ProcessBlocksInput, ProcessBloc
             mod: { modId, modVersion, minecraftVersion },
             blockstate: bs.blockstate,
             models,
+            type,
           },
         },
         { upsert: true },
@@ -70,7 +76,9 @@ export class ProcessBlocksStep extends ParseStep<ProcessBlocksInput, ProcessBloc
     return { blocksCreated, blocksUpdated };
   }
 
-  private extractModelReferences(blockstate: Record<string, unknown>): string[] {
+  private extractModelReferences(
+    blockstate: Record<string, unknown>,
+  ): string[] {
     const models = new Set<string>();
 
     const extractFromObject = (obj: unknown) => {

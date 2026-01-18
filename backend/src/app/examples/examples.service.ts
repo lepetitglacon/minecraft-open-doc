@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { ModExample, ModExampleDocument } from '../../schemas/mod-example.schema';
+import {
+  ModExample,
+  ModExampleDocument,
+} from '../../schemas/mod-example.schema';
 
 @Injectable()
 export class ExamplesService {

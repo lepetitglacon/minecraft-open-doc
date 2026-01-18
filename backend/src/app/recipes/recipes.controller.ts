@@ -16,7 +16,11 @@ export class RecipesController {
     @Param('blockId') blockId: string,
     @Query('minecraftVersion') minecraftVersion?: string,
   ) {
-    return this.recipesService.findByResult(namespace, blockId, minecraftVersion);
+    return this.recipesService.findByResult(
+      namespace,
+      blockId,
+      minecraftVersion,
+    );
   }
 
   @Get('by-namespace/:namespace')

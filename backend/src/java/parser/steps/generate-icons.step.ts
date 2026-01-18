@@ -17,7 +17,10 @@ export interface GenerateIconsOutput {
   iconsGenerated: number;
 }
 
-export class GenerateIconsStep extends ParseStep<GenerateIconsInput, GenerateIconsOutput> {
+export class GenerateIconsStep extends ParseStep<
+  GenerateIconsInput,
+  GenerateIconsOutput
+> {
   readonly name = 'generate-icons';
 
   constructor(
@@ -65,19 +68,25 @@ export class GenerateIconsStep extends ParseStep<GenerateIconsInput, GenerateIco
           }
 
           if (Object.keys(texturesBase64).length > 0) {
-            const icon3d = await this.iconRenderer.renderBlockIcon(
-              texturesResolved,
-              texturesBase64,
-            );
+            const [icon, icon3d] = await Promise.all([
+              this.iconRenderer.renderSimpleIcon(
+                texturesResolved,
+                texturesBase64,
+              ),
+              this.iconRenderer.renderBlockIcon(
+                texturesResolved,
+                texturesBase64,
+              ),
+            ]);
 
-            if (icon3d) {
+            if (icon || icon3d) {
               await this.blockModel.updateOne(
                 {
                   registryName,
                   'mod.modVersion': modVersion,
                   'mod.minecraftVersion': minecraftVersion,
                 },
-                { $set: { icon3d } },
+                { $set: { icon, icon3d } },
               );
               iconsGenerated++;
             }
@@ -95,7 +104,9 @@ export class GenerateIconsStep extends ParseStep<GenerateIconsInput, GenerateIco
     return { iconsGenerated };
   }
 
-  private extractModelReferences(blockstate: Record<string, unknown>): string[] {
+  private extractModelReferences(
+    blockstate: Record<string, unknown>,
+  ): string[] {
     const models = new Set<string>();
 
     const extractFromObject = (obj: unknown) => {

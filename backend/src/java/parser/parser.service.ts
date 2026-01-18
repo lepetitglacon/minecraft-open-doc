@@ -72,9 +72,15 @@ export class ParserService {
     const extractStep = new ExtractJarStep(this.jarExtractor);
     const saveModStep = new SaveModStep(this.modModel);
     const processBlocksStep = new ProcessBlocksStep(this.blockModel);
-    const processTexturesStep = new ProcessTexturesStep(this.textureModel, this.gifGenerator);
+    const processTexturesStep = new ProcessTexturesStep(
+      this.textureModel,
+      this.gifGenerator,
+    );
     const processModelsStep = new ProcessModelsStep(this.blockModelModel);
-    const generateIconsStep = new GenerateIconsStep(this.blockModel, this.iconRenderer);
+    const generateIconsStep = new GenerateIconsStep(
+      this.blockModel,
+      this.iconRenderer,
+    );
 
     // Set callbacks
     if (onStep) {
@@ -87,7 +93,12 @@ export class ParserService {
     }
 
     // Step 1: Calculate hash
-    if (onStep) onStep({ name: 'hash', status: 'running', message: 'Calculating JAR hash...' });
+    if (onStep)
+      onStep({
+        name: 'hash',
+        status: 'running',
+        message: 'Calculating JAR hash...',
+      });
     const jarHash = await this.calculateHash(jarPath);
     if (onStep) onStep({ name: 'hash', status: 'completed' });
 
@@ -108,20 +119,23 @@ export class ParserService {
     });
 
     // Step 5: Process textures
-    const { texturesCreated, texturesBase64Map } = await processTexturesStep.execute({
-      textures,
-      modId: metadata.modId,
-      modVersion: metadata.modVersion,
-      minecraftVersion: metadata.minecraftVersion,
-    });
+    const { texturesCreated, texturesBase64Map } =
+      await processTexturesStep.execute({
+        textures,
+        modId: metadata.modId,
+        modVersion: metadata.modVersion,
+        minecraftVersion: metadata.minecraftVersion,
+      });
 
     // Step 6: Process models
-    const { modelsCreated, modelTexturesMap } = await processModelsStep.execute({
-      models,
-      modId: metadata.modId,
-      modVersion: metadata.modVersion,
-      minecraftVersion: metadata.minecraftVersion,
-    });
+    const { modelsCreated, modelTexturesMap } = await processModelsStep.execute(
+      {
+        models,
+        modId: metadata.modId,
+        modVersion: metadata.modVersion,
+        minecraftVersion: metadata.minecraftVersion,
+      },
+    );
 
     // Step 7: Generate icons
     const { iconsGenerated } = await generateIconsStep.execute({
@@ -135,7 +149,11 @@ export class ParserService {
 
     // Step 8: Complete
     if (onStep) {
-      onStep({ name: 'complete', status: 'completed', message: 'Parsing completed successfully' });
+      onStep({
+        name: 'complete',
+        status: 'completed',
+        message: 'Parsing completed successfully',
+      });
     }
 
     return {
@@ -148,7 +166,10 @@ export class ParserService {
     };
   }
 
-  async parseDirectory(dirPath: string, onStep?: StepCallback): Promise<ParseResult[]> {
+  async parseDirectory(
+    dirPath: string,
+    onStep?: StepCallback,
+  ): Promise<ParseResult[]> {
     const files = fs.readdirSync(dirPath);
     const jarFiles = files.filter((f) => f.endsWith('.jar'));
 

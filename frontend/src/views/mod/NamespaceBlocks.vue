@@ -10,6 +10,8 @@ const namespace = computed(() => route.params.namespace as string);
 const searchInput = ref('');
 const search = ref('');
 const page = ref(1);
+const sort = ref('registryName');
+const order = ref<'asc' | 'desc'>('asc');
 
 const {
   blocks,
@@ -23,6 +25,8 @@ const {
   search,
   page,
   limit: 100,
+  sort,
+  order,
 });
 
 // Debounce search
@@ -30,6 +34,16 @@ const handleSearch = debounce(() => {
   search.value = searchInput.value;
   page.value = 1;
 }, 300);
+
+// Sort handling
+const toggleOrder = () => {
+  order.value = order.value === 'asc' ? 'desc' : 'asc';
+  page.value = 1;
+};
+
+watch(sort, () => {
+  page.value = 1;
+});
 
 // Navigation
 const nextPage = () => {
@@ -62,6 +76,17 @@ watch(namespace, () => {
         @input="handleSearch"
         class="jei-search"
       />
+      
+      <div class="jei-sort-controls">
+        <select v-model="sort" class="jei-select">
+          <option value="registryName">Name</option>
+          <option value="type">Type</option>
+        </select>
+        <button @click="toggleOrder" class="jei-sort-btn" :title="order === 'asc' ? 'Ascending' : 'Descending'">
+          {{ order === 'asc' ? 'AZ' : 'ZA' }}
+        </button>
+      </div>
+
       <span class="jei-count">
         <template v-if="isLoading">Loading...</template>
         <template v-else>{{ total }} blocks</template>
@@ -153,6 +178,39 @@ watch(namespace, () => {
 .jei-search:focus {
   outline: none;
   border-color: #5c5cff;
+}
+
+.jei-sort-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.jei-select {
+  padding: 4px;
+  border: 2px solid #373737;
+  background-color: #fff;
+  font-family: 'Minecraft', monospace;
+  font-size: 12px;
+  box-shadow: inset 1px 1px 0 #555;
+  cursor: pointer;
+}
+
+.jei-sort-btn {
+  padding: 4px 8px;
+  border: 2px solid #373737;
+  background-color: #c6c6c6;
+  font-family: 'Minecraft', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow:
+    inset 1px 1px 0 #fff,
+    inset -1px -1px 0 #555;
+}
+
+.jei-sort-btn:active {
+  box-shadow:
+    inset -1px -1px 0 #fff,
+    inset 1px 1px 0 #555;
 }
 
 .jei-count {

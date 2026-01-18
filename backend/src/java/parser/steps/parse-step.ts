@@ -23,7 +23,11 @@ export abstract class ParseStep<TInput = unknown, TOutput = unknown> {
     return this;
   }
 
-  protected emit(status: StepStatus, progress?: StepProgress, message?: string): void {
+  protected emit(
+    status: StepStatus,
+    progress?: StepProgress,
+    message?: string,
+  ): void {
     if (this.callback) {
       this.callback({
         name: this.name,

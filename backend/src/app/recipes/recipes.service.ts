@@ -5,9 +5,7 @@ import { Recipe, RecipeDocument } from '../../schemas/recipe.schema';
 
 @Injectable()
 export class RecipesService {
-  constructor(
-    @InjectModel(Recipe.name) private recipeModel: Model<Recipe>,
-  ) {}
+  constructor(@InjectModel(Recipe.name) private recipeModel: Model<Recipe>) {}
 
   async findByResult(
     namespace: string,

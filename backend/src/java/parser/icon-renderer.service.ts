@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { createCanvas, loadImage, Image } from '@napi-rs/canvas';
+import { createCanvas, loadImage, CanvasRenderingContext2D } from '@napi-rs/canvas';
 
 const ICON_SIZE = 64;
 const TEXTURE_SIZE = 16; // Taille standard des textures Minecraft
@@ -33,18 +33,22 @@ export class IconRendererService {
   ): Promise<string | null> {
     try {
       // Trouver les textures pour chaque face
-      const topTexture = this.getTextureBase64('up', textures, texturesBase64)
-        || this.getTextureBase64('top', textures, texturesBase64);
-      const leftTexture = this.getTextureBase64('west', textures, texturesBase64)
-        || this.getTextureBase64('side', textures, texturesBase64)
-        || this.getTextureBase64('north', textures, texturesBase64);
-      const rightTexture = this.getTextureBase64('south', textures, texturesBase64)
-        || this.getTextureBase64('east', textures, texturesBase64)
-        || this.getTextureBase64('side', textures, texturesBase64);
+      const topTexture =
+        this.getTextureBase64('up', textures, texturesBase64) ||
+        this.getTextureBase64('top', textures, texturesBase64);
+      const leftTexture =
+        this.getTextureBase64('west', textures, texturesBase64) ||
+        this.getTextureBase64('side', textures, texturesBase64) ||
+        this.getTextureBase64('north', textures, texturesBase64);
+      const rightTexture =
+        this.getTextureBase64('south', textures, texturesBase64) ||
+        this.getTextureBase64('east', textures, texturesBase64) ||
+        this.getTextureBase64('side', textures, texturesBase64);
 
       // Fallback: utiliser 'all' ou la première texture disponible
-      const fallback = this.getTextureBase64('all', textures, texturesBase64)
-        || Object.values(texturesBase64)[0];
+      const fallback =
+        this.getTextureBase64('all', textures, texturesBase64) ||
+        Object.values(texturesBase64)[0];
 
       const top = topTexture || fallback;
       const left = leftTexture || fallback;
@@ -54,12 +58,89 @@ export class IconRendererService {
         return null;
       }
 
-      return await this.renderIsometricCube(top, left, right);
-    } catch (error) {
-      this.logger.error(`Failed to render icon: ${error.message}`);
-      return null;
-    }
-  }
+            return await this.renderIsometricCube(top, left, right);
+
+          } catch (error: unknown) {
+
+            const message = error instanceof Error ? error.message : String(error);
+
+            this.logger.error(`Failed to render icon: ${message}`);
+
+            return null;
+
+          }
+
+        }
+
+      
+
+        /**
+
+         * Génère une icône 2D simple pour un bloc
+
+         * Utilise la texture 'front' si disponible, sinon l'unique texture s'il n'y en a qu'une
+
+         */
+
+        async renderSimpleIcon(
+
+          textures: TextureMapping,
+
+          texturesBase64: TexturesBase64,
+
+        ): Promise<string | null> {
+
+          try {
+
+            // 1. Chercher la texture 'front'
+
+            const front = this.getTextureBase64('front', textures, texturesBase64);
+
+            if (front) {
+
+              return Promise.resolve(front);
+
+            }
+
+      
+
+            // 2. Si pas de 'front', et qu'il n'y a qu'une seule texture, l'utiliser
+
+            const texturePaths = Object.keys(texturesBase64);
+
+            if (texturePaths.length === 1) {
+
+              return Promise.resolve(texturesBase64[texturePaths[0]]);
+
+            }
+
+      
+
+            // 3. Fallback sur 'all' ou 'top' ou la première trouvée
+
+            const fallback = this.getTextureBase64('all', textures, texturesBase64)
+
+              || this.getTextureBase64('top', textures, texturesBase64)
+
+              || this.getTextureBase64('up', textures, texturesBase64)
+
+              || texturesBase64[texturePaths[0]];
+
+      
+
+            return Promise.resolve(fallback || null);
+
+          } catch (error: unknown) {
+
+            const message = error instanceof Error ? error.message : String(error);
+
+            this.logger.error(`Failed to render simple icon: ${message}`);
+
+            return null;
+
+          }
+
+        }
 
   private getTextureBase64(
     face: string,
@@ -76,7 +157,9 @@ export class IconRendererService {
   /**
    * Extrait les pixels d'une image en tableau RGBA
    */
-  private async getPixelData(base64: string): Promise<Uint8ClampedArray | null> {
+  private async getPixelData(
+    base64: string,
+  ): Promise<Uint8ClampedArray | null> {
     try {
       const img = await loadImage(base64);
       const canvas = createCanvas(TEXTURE_SIZE, TEXTURE_SIZE);
@@ -88,7 +171,7 @@ export class IconRendererService {
 
       const imageData = ctx.getImageData(0, 0, TEXTURE_SIZE, TEXTURE_SIZE);
       return imageData.data;
-    } catch {
+    } catch (error: unknown) {
       return null;
     }
   }
@@ -143,8 +226,8 @@ export class IconRendererService {
           // Projection isométrique pour la face gauche
           // u va de gauche à droite sur la texture (correspond à la profondeur)
           // v va de haut en bas sur la texture (correspond à la hauteur)
-          const screenX = cx - (texSize - u) * scale + u * scale / 2;
-          const screenY = cy + u * scale / 2 + v * scale;
+          const screenX = cx - (texSize - u) * scale + (u * scale) / 2;
+          const screenY = cy + (u * scale) / 2 + v * scale;
 
           // Assombrir la face gauche (environ 60% de luminosité)
           const brightness = 0.6;
@@ -165,7 +248,8 @@ export class IconRendererService {
 
           // Projection isométrique pour la face droite
           const screenX = cx + u * scale;
-          const screenY = cy + texSize * scale / 2 + u * scale / 2 + v * scale;
+          const screenY =
+            cy + (texSize * scale) / 2 + (u * scale) / 2 + v * scale;
 
           // Assombrir légèrement la face droite (environ 80% de luminosité)
           const brightness = 0.8;
@@ -186,7 +270,7 @@ export class IconRendererService {
           // Projection isométrique pour la face du dessus
           // Le losange est formé par la transformation isométrique
           const screenX = cx + (u - v) * scale;
-          const screenY = cy + (u + v) * scale / 2;
+          const screenY = cy + ((u + v) * scale) / 2;
 
           ctx.fillStyle = `rgba(${pixel.r}, ${pixel.g}, ${pixel.b}, ${pixel.a / 255})`;
 
@@ -201,7 +285,7 @@ export class IconRendererService {
   /**
    * Dessine un pixel isométrique pour la face du dessus (losange)
    */
-  private drawIsometricPixelTop(ctx: any, x: number, y: number, scale: number): void {
+  private drawIsometricPixelTop(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number): void {
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(x + scale, y + scale / 2);
@@ -214,7 +298,7 @@ export class IconRendererService {
   /**
    * Dessine un pixel isométrique pour la face gauche (parallélogramme)
    */
-  private drawIsometricPixelLeft(ctx: any, x: number, y: number, scale: number): void {
+  private drawIsometricPixelLeft(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number): void {
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(x + scale, y + scale / 2);
@@ -227,7 +311,7 @@ export class IconRendererService {
   /**
    * Dessine un pixel isométrique pour la face droite (parallélogramme)
    */
-  private drawIsometricPixelRight(ctx: any, x: number, y: number, scale: number): void {
+  private drawIsometricPixelRight(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number): void {
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(x + scale, y - scale / 2);

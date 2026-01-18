@@ -126,11 +126,11 @@ export class ModelsService {
 
     // Get elements (from model or default cube)
     let elements: ModelElement[] = [];
-    let textures: Record<string, string> = { ...model.textures };
+    const textures: Record<string, string> = { ...model.textures };
 
     if (model.elements && model.elements.length > 0) {
       // Model has its own elements
-      elements = model.elements as ModelElement[];
+      elements = model.elements;
     } else if (model.parent) {
       // Try to resolve parent model
       const parentElements = await this.resolveParentElements(
@@ -210,7 +210,7 @@ export class ModelsService {
     // Try to find the parent model in our DB
     const parentModel = await this.findByPath(parent, minecraftVersion);
     if (parentModel?.elements && parentModel.elements.length > 0) {
-      return parentModel.elements as ModelElement[];
+      return parentModel.elements;
     }
 
     // Check parent's parent recursively

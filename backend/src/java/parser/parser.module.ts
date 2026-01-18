@@ -20,7 +20,12 @@ import { BlockModel, BlockModelSchema } from '../../schemas/block-model.schema';
     ]),
   ],
   controllers: [ParserController],
-  providers: [ParserService, JarExtractorService, GifGeneratorService, IconRendererService],
+  providers: [
+    ParserService,
+    JarExtractorService,
+    GifGeneratorService,
+    IconRendererService,
+  ],
   exports: [ParserService, GifGeneratorService, IconRendererService],
 })
 export class ParserModule {}

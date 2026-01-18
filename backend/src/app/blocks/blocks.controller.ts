@@ -1,5 +1,9 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
-import { BlocksService, BlockFilter, PaginationOptions } from './blocks.service';
+import {
+  BlocksService,
+  BlockFilter,
+  PaginationOptions,
+} from './blocks.service';
 
 @Controller('blocks')
 export class BlocksController {
@@ -13,6 +17,8 @@ export class BlocksController {
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('sort') sort?: string,
+    @Query('order') order?: 'asc' | 'desc',
     @Query('withIcons') withIcons?: string,
     @Query('withTextures') withTextures?: string,
   ) {
@@ -25,6 +31,8 @@ export class BlocksController {
     const pagination: PaginationOptions = {};
     if (page) pagination.page = parseInt(page, 10);
     if (limit) pagination.limit = Math.min(parseInt(limit, 10), 100);
+    if (sort) pagination.sort = sort;
+    if (order) pagination.order = order;
 
     if (withIcons === 'true') {
       return this.blocksService.findAllWithIcons(
@@ -55,7 +63,11 @@ export class BlocksController {
     @Query('withIcons') withIcons?: string,
   ) {
     if (withIcons === 'true') {
-      return this.blocksService.findOneWithIcons(namespace, blockId, minecraftVersion);
+      return this.blocksService.findOneWithIcons(
+        namespace,
+        blockId,
+        minecraftVersion,
+      );
     }
     return this.blocksService.findOne(namespace, blockId, minecraftVersion);
   }

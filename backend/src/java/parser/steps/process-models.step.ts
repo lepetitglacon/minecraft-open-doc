@@ -15,7 +15,10 @@ export interface ProcessModelsOutput {
   modelTexturesMap: Map<string, Record<string, string>>;
 }
 
-export class ProcessModelsStep extends ParseStep<ProcessModelsInput, ProcessModelsOutput> {
+export class ProcessModelsStep extends ParseStep<
+  ProcessModelsInput,
+  ProcessModelsOutput
+> {
   readonly name = 'process-models';
 
   constructor(private readonly blockModelModel: Model<BlockModel>) {
@@ -40,7 +43,7 @@ export class ProcessModelsStep extends ParseStep<ProcessModelsInput, ProcessMode
         : [];
 
       if (model.textures) {
-        modelTexturesMap.set(model.modelPath, model.textures as Record<string, string>);
+        modelTexturesMap.set(model.modelPath, model.textures);
       }
 
       const result = await this.blockModelModel.updateOne(

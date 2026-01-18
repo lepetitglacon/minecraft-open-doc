@@ -17,6 +17,8 @@ export interface BlockFilter {
 export interface PaginationOptions {
   page?: number;
   limit?: number;
+  sort?: string;
+  order?: 'asc' | 'desc';
 }
 
 export interface PaginatedResult<T> {
@@ -58,7 +60,7 @@ export class BlocksService {
     filter: BlockFilter = {},
     pagination: PaginationOptions = {},
   ): Promise<PaginatedResult<BlockDocument>> {
-    const { page = 1, limit = 50 } = pagination;
+    const { page = 1, limit = 50, sort, order = 'asc' } = pagination;
     const skip = (page - 1) * limit;
 
     const query: BlockQuery = {};
@@ -79,8 +81,21 @@ export class BlocksService {
       query.$text = { $search: filter.search };
     }
 
+    const sortOptions: Record<string, 1 | -1> = {};
+    if (sort) {
+      sortOptions[sort] = order === 'asc' ? 1 : -1;
+    } else {
+      // Default sort by registryName
+      sortOptions.registryName = 1;
+    }
+
     const [data, total] = await Promise.all([
-      this.blockModel.find(query).skip(skip).limit(limit).exec(),
+      this.blockModel
+        .find(query)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit)
+        .exec(),
       this.blockModel.countDocuments(query).exec(),
     ]);
 
@@ -335,7 +350,9 @@ export class BlocksService {
             icon = textureBase64Map.get(modelData.resolvedTextures[0]);
           } else {
             // Prendre la première texture disponible
-            const firstPath = Object.values(modelData.textures).find(t => typeof t === 'string' && !t.startsWith('#'));
+            const firstPath = Object.values(modelData.textures).find(
+              (t) => typeof t === 'string' && !t.startsWith('#'),
+            );
             if (firstPath && textureBase64Map.has(firstPath)) {
               icon = textureBase64Map.get(firstPath);
             }

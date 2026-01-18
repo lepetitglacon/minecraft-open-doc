@@ -86,15 +86,16 @@ export class ModsService {
     minecraftVersions: string[];
     byMinecraftVersion: { version: string; count: number }[];
   }> {
-    const [totalMods, minecraftVersions, byMinecraftVersion] = await Promise.all([
-      this.modModel.countDocuments().exec(),
-      this.modModel.distinct('minecraftVersion').exec(),
-      this.modModel.aggregate([
-        { $group: { _id: '$minecraftVersion', count: { $sum: 1 } } },
-        { $project: { version: '$_id', count: 1, _id: 0 } },
-        { $sort: { version: -1 } },
-      ]),
-    ]);
+    const [totalMods, minecraftVersions, byMinecraftVersion] =
+      await Promise.all([
+        this.modModel.countDocuments().exec(),
+        this.modModel.distinct('minecraftVersion').exec(),
+        this.modModel.aggregate([
+          { $group: { _id: '$minecraftVersion', count: { $sum: 1 } } },
+          { $project: { version: '$_id', count: 1, _id: 0 } },
+          { $sort: { version: -1 } },
+        ]),
+      ]);
 
     return {
       totalMods,

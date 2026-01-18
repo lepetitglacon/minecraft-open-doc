@@ -51,6 +51,8 @@ interface UseBlocksOptions {
   search?: Ref<string>;
   page?: Ref<number>;
   limit?: number;
+  sort?: Ref<string>;
+  order?: Ref<'asc' | 'desc'>;
 }
 
 // Cache des icônes 3D rendues
@@ -61,7 +63,7 @@ const renderedIconsCache = new Map<string, string>();
  */
 export function useBlocks(options: UseBlocksOptions) {
   const api = useApi();
-  const { namespace, search, page, limit = 100 } = options;
+  const { namespace, search, page, limit = 100, sort, order } = options;
 
   const queryKey = computed(() => [
     'blocks',
@@ -69,6 +71,8 @@ export function useBlocks(options: UseBlocksOptions) {
     search?.value || '',
     page?.value || 1,
     limit,
+    sort?.value || '',
+    order?.value || 'asc',
   ]);
 
   const query = useQuery({
@@ -80,6 +84,8 @@ export function useBlocks(options: UseBlocksOptions) {
           search: search?.value || undefined,
           page: page?.value || 1,
           limit,
+          sort: sort?.value || undefined,
+          order: order?.value || undefined,
           withIcons: 'true',
           withTextures: 'true', // Nécessaire pour le rendu 3D
         },
@@ -135,10 +141,10 @@ export function useBlocks(options: UseBlocksOptions) {
         animatedIcon = Object.values(block.animatedTextures)[0] as string;
       }
 
-      // Priorité: icon3d (backend) > renderedIcon (client) > icon (fallback)
-      const renderedIcon = block.icon3d
-        || renderedIcons.value.get(block._id)
-        || block.icon;
+      // Priorité: icon (2D) > icon3d (backend) > renderedIcon (client)
+      const renderedIcon = block.icon
+        || block.icon3d
+        || renderedIcons.value.get(block._id);
 
       return {
         _id: block._id,

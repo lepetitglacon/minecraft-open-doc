@@ -8,6 +8,15 @@
           placeholder="Search blocks..." 
           class="search-input"
         />
+        <div class="sort-controls">
+          <select v-model="sort" class="sort-select">
+            <option value="registryName">Name</option>
+            <option value="type">Type</option>
+          </select>
+          <button @click="toggleOrder" class="sort-btn" :title="order === 'asc' ? 'Ascending' : 'Descending'">
+            {{ order === 'asc' ? 'AZ' : 'ZA' }}
+          </button>
+        </div>
       </div>
       
       <div class="blocks-list" v-if="!isLoading">
@@ -65,7 +74,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useBlocks } from '../../composables/useBlocks';
-import { SceneRenderer, BlockData } from './SceneRenderer';
+import { SceneRenderer } from './SceneRenderer';
 import { useApi } from '../../composables/useApi';
 import { useRouter } from 'vue-router';
 
@@ -80,12 +89,26 @@ const router = useRouter();
 // Sidebar & Data
 const search = ref('');
 const page = ref(1);
+const sort = ref('registryName');
+const order = ref<'asc' | 'desc'>('asc');
+
 const { blocks, isLoading } = useBlocks({
   namespace: computed(() => props.namespace),
   search,
   page,
   limit: 200,
-  withTextures: false, // Don't load all textures at once
+  sort,
+  order,
+});
+
+// Sort handling
+const toggleOrder = () => {
+  order.value = order.value === 'asc' ? 'desc' : 'asc';
+  page.value = 1;
+};
+
+watch(sort, () => {
+  page.value = 1;
 });
 
 // 3D Scene
@@ -189,6 +212,34 @@ onUnmounted(() => {
   border: 1px solid #555;
   color: white;
   font-family: 'Minecraft', monospace;
+}
+
+.sort-controls {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.sort-select {
+  flex: 1;
+  padding: 4px;
+  background-color: #111;
+  border: 1px solid #555;
+  color: white;
+  font-family: 'Minecraft', monospace;
+}
+
+.sort-btn {
+  padding: 4px 8px;
+  background-color: #444;
+  border: 1px solid #555;
+  color: white;
+  cursor: pointer;
+  font-family: 'Minecraft', monospace;
+}
+
+.sort-btn:hover {
+  background-color: #555;
 }
 
 .blocks-list {

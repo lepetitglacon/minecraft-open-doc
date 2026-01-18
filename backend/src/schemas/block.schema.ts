@@ -39,6 +39,12 @@ export class Block {
   @Prop([String])
   textures?: string[]; // Referenced texture paths
 
+  @Prop({ index: true })
+  type?: string; // Primary model path (e.g. mekanism:block/bin)
+
+  @Prop()
+  icon?: string; // Pre-rendered 2D icon (base64 PNG)
+
   @Prop()
   icon3d?: string; // Pre-rendered 3D icon (base64 PNG)
 }
