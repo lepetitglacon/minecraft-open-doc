@@ -54,6 +54,16 @@
       <div class="controls-hint">
         Left Click: Place | Right Click: Remove | Drag: Rotate | Scroll: Zoom
       </div>
+      <div class="viewport-tools">
+        <button 
+          class="tool-btn" 
+          :class="{ active: isConnectionMode }" 
+          @click="toggleConnectionMode"
+          title="Toggle Edit Mode"
+        >
+          ✏️ Edit
+        </button>
+      </div>
     </div>
 
     <!-- Save Dialog -->
@@ -115,8 +125,16 @@ watch(sort, () => {
 const viewportRef = ref<HTMLElement | null>(null);
 let renderer: SceneRenderer | null = null;
 const selectedBlock = ref<any>(null);
+const isConnectionMode = ref(false);
 
 const placedBlocks = ref<Array<{x: number, y: number, z: number, blockId: string}>>([]);
+
+const toggleConnectionMode = () => {
+  isConnectionMode.value = !isConnectionMode.value;
+  if (renderer) {
+    renderer.setConnectionMode(isConnectionMode.value);
+  }
+};
 
 const selectBlock = (block: any) => {
   selectedBlock.value = block;
@@ -315,6 +333,33 @@ onUnmounted(() => {
   font-size: 0.8rem;
   pointer-events: none;
   user-select: none;
+}
+
+.viewport-tools {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 10px;
+}
+
+.tool-btn {
+  background-color: #2a2a2a;
+  border: 2px solid #000;
+  color: white;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: 'Minecraft', monospace;
+  font-size: 0.9rem;
+}
+
+.tool-btn:hover {
+  background-color: #333;
+}
+
+.tool-btn.active {
+  background-color: #4a4;
+  border-color: #fff;
 }
 
 .btn {

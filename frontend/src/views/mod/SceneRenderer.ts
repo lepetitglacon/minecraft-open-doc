@@ -61,9 +61,11 @@ export class SceneRenderer {
 
   private placedBlocks: Map<string, THREE.Object3D> = new Map(); // key "x,y,z" -> Mesh/Group
   private previewMesh: THREE.Object3D | null = null;
+  private connectionPreviewMesh: THREE.Mesh | null = null;
 
   private currentBlockData: BlockData | null = null;
   private currentYRotation: number = 0;
+  private isConnectionMode: boolean = false;
 
   // Drag detection
   private mouseDownPosition: { x: number; y: number } | null = null;
@@ -184,7 +186,14 @@ export class SceneRenderer {
    * Creates a mesh (or group of meshes) from the block's model elements
    */
   private createBlockMesh(blockData: BlockData, transparent = false, opacity = 1): THREE.Object3D {
-    const { textures, texturesBase64, model } = blockData;
+    const { textures, texturesBase64, model, blockId } = blockData;
+
+    // Check if it's a cable-like block (heuristic)
+    const isCable = /pipe|cable|tube|transporter|conductor/i.test(blockId);
+
+    if (isCable) {
+      return this.createCableMesh(blockData, transparent, opacity);
+    }
 
     // If no model or no elements, create a simple cube
     if (!model || !model.elements || model.elements.length === 0) {
@@ -205,6 +214,92 @@ export class SceneRenderer {
 
     return group;
   }
+
+  private createCableMesh(blockData: BlockData, transparent = false, opacity = 1): THREE.Object3D {
+    const group = new THREE.Group();
+    group.userData.isCable = true;
+    group.userData.connections = {
+      up: false, down: false, north: false, south: false, east: false, west: false
+    };
+
+    const radius = 0.25; // 4/16
+    const diameter = radius * 2;
+    
+    // Materials
+    // Try to find a side texture
+    const { textures, texturesBase64 } = blockData;
+    let material: THREE.Material = new THREE.MeshLambertMaterial({ color: 0x555555 });
+    
+    if (textures && texturesBase64) {
+      // Logic to pick a texture
+      let texBase64 = null;
+      for (const key of ['side', 'all', 'particle', 'front']) {
+        if (textures[key] && texturesBase64[textures[key]]) {
+          texBase64 = texturesBase64[textures[key]];
+          break;
+        }
+      }
+      if (!texBase64 && Object.values(texturesBase64).length > 0) {
+        texBase64 = Object.values(texturesBase64)[0];
+      }
+
+      if (texBase64) {
+        const texture = this.loadTexture(texBase64);
+        material = new THREE.MeshLambertMaterial({ map: texture, transparent: true, opacity });
+      }
+    }
+
+    // Central Node
+    const centerGeo = new THREE.BoxGeometry(diameter, diameter, diameter);
+    const centerMesh = new THREE.Mesh(centerGeo, material);
+    centerMesh.userData.part = 'center';
+    group.add(centerMesh);
+
+    // Branches
+    const branchLength = (1 - diameter) / 2;
+    const branchOffset = diameter / 2 + branchLength / 2;
+
+    const branches = [
+      { name: 'east',  dir: [1, 0, 0], size: [branchLength, diameter, diameter], pos: [branchOffset, 0, 0], rotateFaces: [2, 3, 4, 5] },
+      { name: 'west',  dir: [-1, 0, 0], size: [branchLength, diameter, diameter], pos: [-branchOffset, 0, 0], rotateFaces: [2, 3, 4, 5] },
+      { name: 'up',    dir: [0, 1, 0], size: [diameter, branchLength, diameter], pos: [0, branchOffset, 0], rotateFaces: [] },
+      { name: 'down',  dir: [0, -1, 0], size: [diameter, branchLength, diameter], pos: [0, -branchOffset, 0], rotateFaces: [] },
+      { name: 'south', dir: [0, 0, 1], size: [diameter, diameter, branchLength], pos: [0, 0, branchOffset], rotateFaces: [0, 1, 2, 3] },
+      { name: 'north', dir: [0, 0, -1], size: [diameter, diameter, branchLength], pos: [0, 0, -branchOffset], rotateFaces: [0, 1, 2, 3] },
+    ];
+
+    for (const b of branches) {
+      const geo = new THREE.BoxGeometry(b.size[0], b.size[1], b.size[2]);
+      
+      // Rotate UVs for specific faces to align texture
+      if (b.rotateFaces.length > 0) {
+        const uvAttribute = geo.getAttribute('uv');
+        for (const faceIndex of b.rotateFaces) {
+          // Each face has 4 vertices in standard BoxGeometry (non-indexed or separate faces)
+          const offset = faceIndex * 4;
+          
+          for (let i = 0; i < 4; i++) {
+            const u = uvAttribute.getX(offset + i);
+            const v = uvAttribute.getY(offset + i);
+            // Rotate 90 degrees
+            uvAttribute.setXY(offset + i, v, 1 - u);
+          }
+        }
+        uvAttribute.needsUpdate = true;
+      }
+
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.position.set(b.pos[0], b.pos[1], b.pos[2]);
+      mesh.name = b.name;
+      mesh.visible = false; // Hidden by default
+      mesh.userData.part = 'branch';
+      mesh.userData.direction = b.name;
+      group.add(mesh);
+    }
+
+    return group;
+  }
+
 
   /**
    * Creates a mesh for a single model element
@@ -425,6 +520,12 @@ export class SceneRenderer {
 
   // --- Interaction ---
 
+  public setConnectionMode(enabled: boolean) {
+    this.isConnectionMode = enabled;
+    if (this.previewMesh) this.previewMesh.visible = false;
+    if (this.connectionPreviewMesh) this.connectionPreviewMesh.visible = false;
+  }
+
   public selectBlock(blockData: BlockData | null) {
     this.currentBlockData = blockData;
     this.updatePreview();
@@ -503,6 +604,15 @@ export class SceneRenderer {
   }
 
   private onMouseMove(event: MouseEvent) {
+    // Determine which mode we are in
+    if (this.isConnectionMode) {
+      if (this.previewMesh) this.previewMesh.visible = false;
+      this.handleConnectionPreview(event);
+      return;
+    }
+    
+    // Placement Mode
+    if (this.connectionPreviewMesh) this.connectionPreviewMesh.visible = false;
     if (!this.previewMesh || !this.currentBlockData) return;
 
     const result = this.getIntersect(event);
@@ -511,15 +621,11 @@ export class SceneRenderer {
       const pos = intersection.point.clone();
       
       if (intersection.face) {
-        // Move slightly into the face or away from it to ensure correct floor()
-        // To place NEXT to the hit face, we add the normal multiplied by 0.5
         pos.add(intersection.face.normal.clone().multiplyScalar(0.5));
       }
       
-      // Snap to grid
       pos.floor().addScalar(0.5);
 
-      // Check if occupied
       const key = `${pos.x},${pos.y},${pos.z}`;
       if (this.placedBlocks.has(key)) {
         this.previewMesh.visible = false;
@@ -532,29 +638,137 @@ export class SceneRenderer {
     }
   }
 
+  private handleConnectionPreview(event: MouseEvent) {
+    // We will manage the preview mesh dynamically based on the target branch
+    
+    // 1. Hide existing preview first
+    if (this.connectionPreviewMesh) {
+      this.connectionPreviewMesh.visible = false;
+    }
+
+    const result = this.getIntersect(event);
+    if (!result || !result.blockRoot || !result.blockRoot.userData.isCable) {
+      return;
+    }
+
+    const { blockRoot, intersection } = result;
+    const clickedMesh = intersection.object;
+    
+    // We are hovering a cable. Determine direction.
+    let dir = '';
+    const localPoint = clickedMesh.worldToLocal(intersection.point.clone());
+
+    if (clickedMesh.userData.part === 'center') {
+      const absX = Math.abs(localPoint.x);
+      const absY = Math.abs(localPoint.y);
+      const absZ = Math.abs(localPoint.z);
+      
+      if (absX >= absY && absX >= absZ) dir = localPoint.x > 0 ? 'east' : 'west';
+      else if (absY >= absX && absY >= absZ) dir = localPoint.y > 0 ? 'up' : 'down';
+      else dir = localPoint.z > 0 ? 'south' : 'north';
+    } else if (clickedMesh.userData.part === 'branch') {
+      dir = clickedMesh.userData.direction;
+    }
+
+    if (!dir) return;
+
+    // Find the branch object
+    const branch = blockRoot.children.find(c => c.name === dir) as THREE.Mesh;
+    if (!branch) return;
+
+    // Logic: If branch is already visible (connected), we are in "remove" mode -> Show nothing
+    // If branch is hidden (disconnected), we are in "add" mode -> Show preview of the branch
+    if (branch.visible) {
+      // It will be removed, so show nothing (as requested)
+      return;
+    }
+
+    // It will be added, show the model
+    if (!this.connectionPreviewMesh) {
+      this.connectionPreviewMesh = new THREE.Mesh();
+      this.scene.add(this.connectionPreviewMesh);
+    }
+
+    this.connectionPreviewMesh.geometry = branch.geometry;
+    
+    // Clone material to make it slightly transparent to indicate preview
+    const originalMat = branch.material;
+    if (Array.isArray(originalMat)) {
+        this.connectionPreviewMesh.material = originalMat.map(m => {
+            const clone = m.clone();
+            clone.transparent = true;
+            clone.opacity = 0.7;
+            return clone;
+        });
+    } else {
+        const clone = originalMat.clone();
+        clone.transparent = true;
+        clone.opacity = 0.7;
+        this.connectionPreviewMesh.material = clone;
+    }
+
+    // Match transform
+    const worldPos = new THREE.Vector3();
+    const worldQuat = new THREE.Quaternion();
+    const worldScale = new THREE.Vector3();
+    
+    branch.getWorldPosition(worldPos);
+    branch.getWorldQuaternion(worldQuat);
+    branch.getWorldScale(worldScale);
+
+    this.connectionPreviewMesh.position.copy(worldPos);
+    this.connectionPreviewMesh.quaternion.copy(worldQuat);
+    this.connectionPreviewMesh.scale.copy(worldScale);
+    
+    this.connectionPreviewMesh.visible = true;
+  }
+
   private onMouseDown(event: MouseEvent) {
     if (event.button !== 0 && event.button !== 2) return; // Left or Right click
-
-    // Record mouse down position to detect drag vs click
     this.mouseDownPosition = { x: event.clientX, y: event.clientY };
   }
 
   private onMouseUp(event: MouseEvent) {
     if (!this.mouseDownPosition) return;
-
-    // Check if this was a click (not a drag)
     const dx = Math.abs(event.clientX - this.mouseDownPosition.x);
     const dy = Math.abs(event.clientY - this.mouseDownPosition.y);
     const isClick = dx < this.CLICK_THRESHOLD && dy < this.CLICK_THRESHOLD;
-
     this.mouseDownPosition = null;
 
-    if (!isClick) return; // It was a drag, don't place/remove
+    if (!isClick) return;
 
     const result = this.getIntersect(event);
     if (!result) return;
+    const { blockRoot, intersection } = result;
 
-    const { blockRoot } = result;
+    // Edit Mode (Connection Toggling)
+    if (this.isConnectionMode && event.button === 0) {
+      if (blockRoot && blockRoot.userData.isCable) {
+        const clickedMesh = intersection.object;
+        let dir = '';
+        const localPoint = clickedMesh.worldToLocal(intersection.point.clone());
+
+        if (clickedMesh.userData.part === 'center') {
+          const absX = Math.abs(localPoint.x);
+          const absY = Math.abs(localPoint.y);
+          const absZ = Math.abs(localPoint.z);
+          if (absX >= absY && absX >= absZ) dir = localPoint.x > 0 ? 'east' : 'west';
+          else if (absY >= absX && absY >= absZ) dir = localPoint.y > 0 ? 'up' : 'down';
+          else dir = localPoint.z > 0 ? 'south' : 'north';
+        } else if (clickedMesh.userData.part === 'branch') {
+          dir = clickedMesh.userData.direction;
+        }
+
+        const branch = blockRoot.children.find(c => c.name === dir);
+        if (branch) {
+          branch.visible = !branch.visible;
+          blockRoot.userData.connections[dir] = branch.visible;
+          // Update preview immediately
+          this.handleConnectionPreview(event);
+        }
+      }
+      return;
+    }
 
     // Right Click: Remove
     if (event.button === 2) {
@@ -624,6 +838,9 @@ export class SceneRenderer {
 
     if (this.previewMesh) {
       this.disposeObject3D(this.previewMesh);
+    }
+    if (this.connectionPreviewMesh) {
+      this.disposeObject3D(this.connectionPreviewMesh);
     }
   }
 }
