@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
-console.log(process.env.MONGODB_URI)
+console.log(process.env)
 
 @Module({
   imports: [
@@ -11,4 +11,8 @@ console.log(process.env.MONGODB_URI)
     ),
   ],
 })
-export class DatabaseModule {}
+export class DatabaseModule {
+
+
+
+}
