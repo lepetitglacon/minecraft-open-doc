@@ -26,6 +26,15 @@ const DEFAULT_CUBE_ELEMENTS: ModelElement[] = [
 
 // Texture variable mappings for common parent models
 const PARENT_TEXTURE_MAPPINGS: Record<string, Record<string, string>> = {
+  // block/block is the base model - use particle texture as fallback for all faces
+  'block/block': {
+    north: '#particle',
+    south: '#particle',
+    east: '#particle',
+    west: '#particle',
+    up: '#particle',
+    down: '#particle',
+  },
   'block/cube_all': {
     north: '#all',
     south: '#all',
@@ -50,6 +59,14 @@ const PARENT_TEXTURE_MAPPINGS: Record<string, Record<string, string>> = {
     up: '#end',
     down: '#end',
   },
+  'block/cube_column_horizontal': {
+    north: '#side',
+    south: '#side',
+    east: '#end',
+    west: '#end',
+    up: '#side',
+    down: '#side',
+  },
   'block/cube_bottom_top': {
     north: '#side',
     south: '#side',
@@ -57,6 +74,30 @@ const PARENT_TEXTURE_MAPPINGS: Record<string, Record<string, string>> = {
     west: '#side',
     up: '#top',
     down: '#bottom',
+  },
+  'block/orientable': {
+    north: '#front',
+    south: '#side',
+    east: '#side',
+    west: '#side',
+    up: '#top',
+    down: '#top',
+  },
+  'block/orientable_with_bottom': {
+    north: '#front',
+    south: '#side',
+    east: '#side',
+    west: '#side',
+    up: '#top',
+    down: '#bottom',
+  },
+  'block/orientable_vertical': {
+    north: '#side',
+    south: '#side',
+    east: '#side',
+    west: '#side',
+    up: '#front',
+    down: '#front',
   },
 };
 
@@ -113,6 +154,220 @@ export class ModelsService {
   }
 
   /**
+   * Resolve multiple models in batch for efficient loading
+   * Returns a map of modelPath -> ResolvedModel
+   */
+  async resolveMultipleModels(
+    modelPaths: string[],
+    minecraftVersion?: string,
+  ): Promise<Map<string, ResolvedModel>> {
+    const result = new Map<string, ResolvedModel>();
+    if (modelPaths.length === 0) return result;
+
+    // Fetch all models
+    const models = await this.findMultipleByPaths(modelPaths, minecraftVersion);
+    const modelMap = new Map<string, BlockModelDocument>();
+    for (const model of models) {
+      modelMap.set(model.modelPath, model);
+    }
+
+    // Recursively fetch all parent models in the chain
+    let newParentPaths = new Set<string>();
+    for (const model of models) {
+      if (model.parent && !this.isVanillaParent(model.parent) && !modelMap.has(model.parent)) {
+        newParentPaths.add(model.parent);
+      }
+    }
+
+    // Keep fetching parents until we have them all
+    while (newParentPaths.size > 0) {
+      const parentModels = await this.findMultipleByPaths(
+        Array.from(newParentPaths),
+        minecraftVersion,
+      );
+
+      const nextParentPaths = new Set<string>();
+      for (const parent of parentModels) {
+        modelMap.set(parent.modelPath, parent);
+        // Check if this parent has its own parent that we need to fetch
+        if (parent.parent && !this.isVanillaParent(parent.parent) && !modelMap.has(parent.parent)) {
+          nextParentPaths.add(parent.parent);
+        }
+      }
+      newParentPaths = nextParentPaths;
+    }
+
+    // Resolve each model
+    for (const modelPath of modelPaths) {
+      const model = modelMap.get(modelPath);
+      if (!model) continue;
+
+      const resolved = this.resolveModelSync(model, modelMap);
+      if (resolved) {
+        result.set(modelPath, resolved);
+      }
+    }
+
+    return result;
+  }
+
+  private isVanillaParent(parent: string): boolean {
+    const normalized = this.normalizeParentName(parent);
+    return (
+      normalized.startsWith('block/cube') ||
+      normalized === 'block/block' ||
+      normalized.startsWith('block/orientable') ||
+      normalized.startsWith('block/cross') ||
+      normalized.startsWith('block/tinted_cross') ||
+      normalized.startsWith('block/template_') ||
+      normalized === 'block/thin_block'
+    );
+  }
+
+  /**
+   * Normalize parent name by removing minecraft: prefix
+   */
+  private normalizeParentName(parent: string): string {
+    if (parent.startsWith('minecraft:')) {
+      return parent.substring('minecraft:'.length);
+    }
+    return parent;
+  }
+
+  /**
+   * Merge textures from the entire parent chain (child overrides parent)
+   */
+  private mergeParentTexturesSync(
+    model: BlockModelDocument,
+    modelMap: Map<string, BlockModelDocument>,
+  ): Record<string, string> {
+    const result: Record<string, string> = {};
+
+    // First, collect textures from parent chain (starting from root)
+    const chain: BlockModelDocument[] = [];
+    let current: BlockModelDocument | undefined = model;
+
+    while (current) {
+      chain.unshift(current); // Add to beginning
+      if (current.parent && !this.isVanillaParent(current.parent)) {
+        current = modelMap.get(current.parent);
+      } else {
+        break;
+      }
+    }
+
+    // Apply textures from root to child (child overrides parent)
+    for (const m of chain) {
+      if (m.textures) {
+        Object.assign(result, m.textures);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Find the texture mapping by following the parent chain
+   */
+  private findParentMappingSync(
+    parent: string,
+    modelMap: Map<string, BlockModelDocument>,
+  ): Record<string, string> | null {
+    const normalized = this.normalizeParentName(parent);
+
+    // Check if we have a direct mapping
+    if (PARENT_TEXTURE_MAPPINGS[normalized]) {
+      return PARENT_TEXTURE_MAPPINGS[normalized];
+    }
+
+    // Try to find the parent model and check its parent
+    const parentModel = modelMap.get(parent);
+    if (parentModel?.parent) {
+      return this.findParentMappingSync(parentModel.parent, modelMap);
+    }
+
+    // No mapping found
+    return null;
+  }
+
+  /**
+   * Synchronously resolve a model using a pre-fetched model map
+   */
+  private resolveModelSync(
+    model: BlockModelDocument,
+    modelMap: Map<string, BlockModelDocument>,
+  ): ResolvedModel | null {
+    // Merge textures from parent chain
+    const textures: Record<string, string> = this.mergeParentTexturesSync(
+      model,
+      modelMap,
+    );
+
+    // Get elements
+    let elements: ModelElement[];
+    if (model.elements && model.elements.length > 0) {
+      elements = model.elements;
+    } else if (model.parent) {
+      elements = this.resolveParentElementsSync(model.parent, modelMap);
+
+      // Find and apply parent texture mappings (following the parent chain)
+      const parentMapping = this.findParentMappingSync(model.parent, modelMap);
+      if (parentMapping) {
+        for (const [face, variable] of Object.entries(parentMapping)) {
+          const varName = variable.replace('#', '');
+          if (textures[varName]) {
+            textures[face] = textures[varName];
+          }
+        }
+      }
+    } else {
+      elements = DEFAULT_CUBE_ELEMENTS;
+    }
+
+    // Resolve texture variables in elements
+    const resolvedElements = this.resolveTextureVariables(elements, textures);
+
+    // Build resolved textures map
+    const resolvedTextures: Record<string, string> = {};
+    for (const [key, value] of Object.entries(textures)) {
+      if (typeof value === 'string' && !value.startsWith('#')) {
+        resolvedTextures[key] = value;
+      }
+    }
+
+    return {
+      modelPath: model.modelPath,
+      elements: resolvedElements,
+      textures: resolvedTextures,
+      ambientOcclusion: model.ambientOcclusion,
+    };
+  }
+
+  private resolveParentElementsSync(
+    parent: string,
+    modelMap: Map<string, BlockModelDocument>,
+  ): ModelElement[] {
+    // Check if it's a vanilla parent model
+    if (this.isVanillaParent(parent)) {
+      return DEFAULT_CUBE_ELEMENTS;
+    }
+
+    // Try to find the parent model in our map
+    const parentModel = modelMap.get(parent);
+    if (parentModel?.elements && parentModel.elements.length > 0) {
+      return parentModel.elements;
+    }
+
+    // Check parent's parent recursively
+    if (parentModel?.parent) {
+      return this.resolveParentElementsSync(parentModel.parent, modelMap);
+    }
+
+    // Default fallback
+    return DEFAULT_CUBE_ELEMENTS;
+  }
+
+  /**
    * Resolve a model with its parent chain for Three.js rendering
    * Returns elements with resolved texture references
    */
@@ -139,8 +394,9 @@ export class ModelsService {
       );
       elements = parentElements;
 
-      // Apply parent texture mappings
-      const parentMapping = PARENT_TEXTURE_MAPPINGS[model.parent];
+      // Apply parent texture mappings (use normalized parent name for lookup)
+      const normalizedParent = this.normalizeParentName(model.parent);
+      const parentMapping = PARENT_TEXTURE_MAPPINGS[normalizedParent];
       if (parentMapping) {
         // Resolve texture variables through the mapping
         for (const [face, variable] of Object.entries(parentMapping)) {
@@ -199,11 +455,7 @@ export class ModelsService {
     minecraftVersion?: string,
   ): Promise<ModelElement[]> {
     // Check if it's a vanilla parent model
-    if (
-      parent.startsWith('block/cube') ||
-      parent === 'block/block' ||
-      parent.startsWith('minecraft:block/')
-    ) {
+    if (this.isVanillaParent(parent)) {
       return DEFAULT_CUBE_ELEMENTS;
     }
 

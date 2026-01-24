@@ -64,6 +64,15 @@ export class BlockModel {
   // Textures résolues (chemins complets vers les textures)
   @Prop([String])
   resolvedTextures: string[];
+
+  // PRE-RESOLVED DATA (computed at parse time)
+  // Elements avec les textures complètement résolues (pas de variables #)
+  @Prop({ type: [MongooseSchema.Types.Mixed] })
+  resolvedElements?: ModelElement[];
+
+  // Mapping complet des textures (face -> texturePath, sans variables #)
+  @Prop({ type: MongooseSchema.Types.Mixed })
+  resolvedTextureMap?: Record<string, string>;
 }
 
 export const BlockModelSchema = SchemaFactory.createForClass(BlockModel);

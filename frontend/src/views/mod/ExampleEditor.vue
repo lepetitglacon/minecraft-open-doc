@@ -125,7 +125,8 @@ const selectBlock = (block: any) => {
       _id: block._id,
       blockId: block.blockId,
       textures: block.textures,
-      texturesBase64: block.texturesBase64
+      texturesBase64: block.texturesBase64,
+      model: block.model,
     });
   }
 };

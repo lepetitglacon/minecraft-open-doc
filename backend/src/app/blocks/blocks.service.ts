@@ -29,6 +29,33 @@ export interface PaginatedResult<T> {
   pages: number;
 }
 
+export interface ModelElement {
+  from: [number, number, number];
+  to: [number, number, number];
+  rotation?: {
+    origin: [number, number, number];
+    axis: 'x' | 'y' | 'z';
+    angle: number;
+    rescale?: boolean;
+  };
+  faces: Record<
+    string,
+    {
+      uv?: [number, number, number, number];
+      texture: string;
+      cullface?: string;
+      rotation?: number;
+      tintindex?: number;
+    }
+  >;
+}
+
+export interface BlockModel3D {
+  modelPath: string;
+  elements: ModelElement[];
+  ambientOcclusion: boolean;
+}
+
 export interface BlockWithIcon {
   _id: string;
   registryName: string;
@@ -46,6 +73,7 @@ export interface BlockWithIcon {
   texturesBase64?: Record<string, string>; // mapping texturePath -> base64
   animatedTextures?: Record<string, string>; // mapping texturePath -> GIF base64 (pour textures animées)
   hasAnimatedTextures?: boolean; // true si au moins une texture est animée
+  model?: BlockModel3D; // modèle 3D complet avec éléments
 }
 
 @Injectable()
@@ -247,6 +275,7 @@ export class BlocksService {
     filter: BlockFilter = {},
     pagination: PaginationOptions = {},
     withTextures = false,
+    withModel = false,
   ): Promise<PaginatedResult<BlockWithIcon>> {
     const result = await this.findAll(filter, pagination);
 
@@ -258,33 +287,59 @@ export class BlocksService {
       }
     }
 
-    // Récupérer tous les modèles en une seule requête
+    // Créer un map modelPath -> model data
+    const modelDataMap = new Map<
+      string,
+      {
+        textures: Record<string, string>;
+        resolvedTextures: string[];
+        elements?: ModelElement[];
+        ambientOcclusion?: boolean;
+      }
+    >();
+    const allTexturePaths = new Set<string>();
+
+    // Récupérer les modèles (avec données pré-résolues si withModel)
     const models = await this.modelsService.findMultipleByPaths(
       Array.from(modelPaths),
       filter.minecraftVersion,
     );
 
-    // Créer un map modelPath -> model data (textures mapping)
-    const modelDataMap = new Map<
-      string,
-      { textures: Record<string, string>; resolvedTextures: string[] }
-    >();
-    const allTexturePaths = new Set<string>();
-
     for (const model of models) {
-      const textures = model.textures || {};
+      // Utiliser les données pré-résolues si disponibles et si withModel
+      const textures = withModel && model.resolvedTextureMap
+        ? model.resolvedTextureMap
+        : model.textures || {};
       const resolvedTextures = model.resolvedTextures || [];
+      const elements = withModel ? model.resolvedElements : undefined;
 
-      modelDataMap.set(model.modelPath, { textures, resolvedTextures });
+      modelDataMap.set(model.modelPath, {
+        textures,
+        resolvedTextures,
+        elements: elements as ModelElement[] | undefined,
+        ambientOcclusion: model.ambientOcclusion,
+      });
 
-      // Collecter tous les chemins de textures
-      for (const texPath of resolvedTextures) {
-        allTexturePaths.add(texPath);
+      // Collecter les textures
+      if (withModel && elements) {
+        // Collecter depuis les éléments résolus
+        for (const element of elements) {
+          for (const face of Object.values(element.faces)) {
+            const faceData = face as { texture?: string };
+            if (faceData.texture && !faceData.texture.startsWith('#')) {
+              allTexturePaths.add(faceData.texture);
+            }
+          }
+        }
       }
+      // Et depuis le mapping de textures
       for (const texPath of Object.values(textures)) {
         if (typeof texPath === 'string' && !texPath.startsWith('#')) {
           allTexturePaths.add(texPath);
         }
+      }
+      for (const texPath of resolvedTextures) {
+        allTexturePaths.add(texPath);
       }
     }
 
@@ -311,6 +366,7 @@ export class BlocksService {
       let blockTexturesBase64: Record<string, string> | undefined;
       let animatedTextures: Record<string, string> | undefined;
       let hasAnimatedTextures = false;
+      let blockModel: BlockModel3D | undefined;
 
       if (block.models && block.models.length > 0) {
         const modelData = modelDataMap.get(block.models[0]);
@@ -321,6 +377,7 @@ export class BlocksService {
           // Construire le map des textures base64 pour ce bloc (seulement si demandé)
           if (withTextures) {
             blockTexturesBase64 = {};
+            // Ajouter les textures du mapping
             for (const texPath of Object.values(modelData.textures)) {
               if (
                 typeof texPath === 'string' &&
@@ -330,6 +387,30 @@ export class BlocksService {
                 blockTexturesBase64[texPath] = textureBase64Map.get(texPath)!;
               }
             }
+            // Si on a des éléments résolus, ajouter aussi leurs textures
+            if (modelData.elements) {
+              for (const element of modelData.elements) {
+                for (const face of Object.values(element.faces)) {
+                  if (
+                    face.texture &&
+                    !face.texture.startsWith('#') &&
+                    textureBase64Map.has(face.texture)
+                  ) {
+                    blockTexturesBase64[face.texture] =
+                      textureBase64Map.get(face.texture)!;
+                  }
+                }
+              }
+            }
+          }
+
+          // Inclure le modèle 3D si demandé
+          if (withModel && modelData.elements && modelData.elements.length > 0) {
+            blockModel = {
+              modelPath: block.models[0],
+              elements: modelData.elements,
+              ambientOcclusion: modelData.ambientOcclusion ?? true,
+            };
           }
 
           // Toujours collecter les GIFs animés si présents
@@ -373,6 +454,7 @@ export class BlocksService {
         texturesBase64: blockTexturesBase64,
         animatedTextures: hasAnimatedTextures ? animatedTextures : undefined,
         hasAnimatedTextures,
+        model: blockModel,
       };
     });
 

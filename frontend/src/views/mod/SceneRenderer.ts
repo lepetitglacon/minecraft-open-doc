@@ -9,11 +9,38 @@ interface TexturesBase64 {
   [path: string]: string;
 }
 
+interface ModelElementFace {
+  uv?: [number, number, number, number];
+  texture: string;
+  cullface?: string;
+  rotation?: number;
+  tintindex?: number;
+}
+
+interface ModelElement {
+  from: [number, number, number];
+  to: [number, number, number];
+  rotation?: {
+    origin: [number, number, number];
+    axis: 'x' | 'y' | 'z';
+    angle: number;
+    rescale?: boolean;
+  };
+  faces: Record<string, ModelElementFace>;
+}
+
+interface BlockModel3D {
+  modelPath: string;
+  elements: ModelElement[];
+  ambientOcclusion: boolean;
+}
+
 export interface BlockData {
   _id: string;
   blockId: string;
   textures?: TextureMapping;
   texturesBase64?: TexturesBase64;
+  model?: BlockModel3D;
 }
 
 export class SceneRenderer {
@@ -30,11 +57,17 @@ export class SceneRenderer {
 
   private textureCache = new Map<string, THREE.Texture>();
   private materialsCache = new Map<string, THREE.Material[]>();
-  
-  private placedBlocks: Map<string, THREE.Mesh> = new Map(); // key "x,y,z" -> Mesh
-  private previewMesh: THREE.Mesh | null = null;
-  
+  private geometryCache = new Map<string, THREE.BufferGeometry>();
+
+  private placedBlocks: Map<string, THREE.Object3D> = new Map(); // key "x,y,z" -> Mesh/Group
+  private previewMesh: THREE.Object3D | null = null;
+
   private currentBlockData: BlockData | null = null;
+  private currentYRotation: number = 0;
+
+  // Drag detection
+  private mouseDownPosition: { x: number; y: number } | null = null;
+  private readonly CLICK_THRESHOLD = 5; // pixels
 
   public onBlockPlaced?: (position: THREE.Vector3, blockId: string) => void;
   public onBlockRemoved?: (position: THREE.Vector3) => void;
@@ -101,7 +134,19 @@ export class SceneRenderer {
   private bindEvents() {
     this.renderer.domElement.addEventListener('mousemove', this.onMouseMove.bind(this));
     this.renderer.domElement.addEventListener('mousedown', this.onMouseDown.bind(this));
+    this.renderer.domElement.addEventListener('mouseup', this.onMouseUp.bind(this));
+    this.renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('resize', this.onWindowResize.bind(this));
+    window.addEventListener('keydown', this.onKeyDown);
+  }
+
+  private onKeyDown = (event: KeyboardEvent) => {
+    if (event.key.toLowerCase() === 'r') {
+      this.currentYRotation = (this.currentYRotation + Math.PI / 2) % (Math.PI * 2);
+      if (this.previewMesh) {
+        this.previewMesh.rotation.y = this.currentYRotation;
+      }
+    }
   }
 
   private onWindowResize() {
@@ -118,8 +163,9 @@ export class SceneRenderer {
   }
 
   // Texture Loading Logic (Adapted from blockIconRenderer)
-  private loadTexture(base64: string, path: string): THREE.Texture {
-    const cacheKey = path || base64.slice(0, 50);
+  private loadTexture(base64: string): THREE.Texture {
+    // Use base64 content as cache key (first 100 chars should be unique enough)
+    const cacheKey = base64.slice(0, 100);
     if (this.textureCache.has(cacheKey)) {
       return this.textureCache.get(cacheKey)!;
     }
@@ -134,49 +180,247 @@ export class SceneRenderer {
     return texture;
   }
 
-  private createMaterials(blockData: BlockData): THREE.Material[] {
-    const cacheKey = blockData._id;
-    if (this.materialsCache.has(cacheKey)) {
-      return this.materialsCache.get(cacheKey)!;
+  /**
+   * Creates a mesh (or group of meshes) from the block's model elements
+   */
+  private createBlockMesh(blockData: BlockData, transparent = false, opacity = 1): THREE.Object3D {
+    const { textures, texturesBase64, model } = blockData;
+
+    // If no model or no elements, create a simple cube
+    if (!model || !model.elements || model.elements.length === 0) {
+      const materials = this.createCubeMaterials(blockData, transparent, opacity);
+      const geometry = new THREE.BoxGeometry(1, 1, 1);
+      return new THREE.Mesh(geometry, materials);
     }
 
+    // Create a group to hold all elements
+    const group = new THREE.Group();
+
+    for (const element of model.elements) {
+      const mesh = this.createElementMesh(element, textures || {}, texturesBase64 || {}, transparent, opacity);
+      if (mesh) {
+        group.add(mesh);
+      }
+    }
+
+    return group;
+  }
+
+  /**
+   * Creates a mesh for a single model element
+   */
+  private createElementMesh(
+    element: ModelElement,
+    textures: TextureMapping,
+    texturesBase64: TexturesBase64,
+    transparent: boolean,
+    opacity: number
+  ): THREE.Mesh | null {
+    // Convert Minecraft coordinates (0-16) to Three.js units (0-1)
+    const from = element.from.map(v => v / 16) as [number, number, number];
+    const to = element.to.map(v => v / 16) as [number, number, number];
+
+    const width = to[0] - from[0];
+    const height = to[1] - from[1];
+    const depth = to[2] - from[2];
+
+    // Skip invalid elements
+    if (width <= 0 || height <= 0 || depth <= 0) return null;
+
+    // Create box geometry
+    const geometry = new THREE.BoxGeometry(width, height, depth);
+
+    // Center offset (Minecraft origin is corner, Three.js is center)
+    const centerX = from[0] + width / 2 - 0.5;
+    const centerY = from[1] + height / 2 - 0.5;
+    const centerZ = from[2] + depth / 2 - 0.5;
+
+    // Create materials for each face
+    // Three.js BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z
+    // Minecraft face names: east, west, up, down, south, north
+    const faceNames = ['east', 'west', 'up', 'down', 'south', 'north'];
+    const materials: THREE.Material[] = [];
+
+    for (const faceName of faceNames) {
+      const faceData = element.faces[faceName];
+
+      if (!faceData) {
+        // No face defined, use transparent material
+        materials.push(new THREE.MeshLambertMaterial({ visible: false }));
+        continue;
+      }
+
+      // Resolve texture path
+      let texturePath = faceData.texture;
+      if (texturePath.startsWith('#')) {
+        const varName = texturePath.substring(1);
+        texturePath = textures[varName] || '';
+      }
+
+      const base64 = texturesBase64[texturePath];
+
+      if (base64) {
+        const texture = this.loadTexture(base64);
+
+        // Apply UV mapping if specified
+        if (faceData.uv) {
+          const clonedTexture = texture.clone();
+          clonedTexture.needsUpdate = true;
+          // UV coords in Minecraft are 0-16, convert to 0-1
+          const [u1, v1, u2, v2] = faceData.uv;
+          clonedTexture.offset.set(u1 / 16, 1 - v2 / 16);
+          clonedTexture.repeat.set((u2 - u1) / 16, (v2 - v1) / 16);
+
+          const mat = new THREE.MeshLambertMaterial({
+            map: clonedTexture,
+            transparent: true, // Always true for PNG alpha support
+            opacity,
+            alphaTest: 0.1, // Discard nearly transparent pixels
+          });
+          materials.push(mat);
+        } else {
+          const mat = new THREE.MeshLambertMaterial({
+            map: texture,
+            transparent: true, // Always true for PNG alpha support
+            opacity,
+            alphaTest: 0.1, // Discard nearly transparent pixels
+          });
+          materials.push(mat);
+        }
+      } else {
+        // Fallback gray material
+        materials.push(new THREE.MeshLambertMaterial({
+          color: 0x888888,
+          transparent,
+          opacity,
+        }));
+      }
+    }
+
+    const mesh = new THREE.Mesh(geometry, materials);
+    mesh.position.set(centerX, centerY, centerZ);
+
+    // Apply rotation if specified
+    if (element.rotation) {
+      const { origin, axis, angle } = element.rotation;
+      const originVec = new THREE.Vector3(
+        origin[0] / 16 - 0.5,
+        origin[1] / 16 - 0.5,
+        origin[2] / 16 - 0.5
+      );
+
+      // Translate to origin, rotate, translate back
+      mesh.position.sub(originVec);
+
+      const radians = (angle * Math.PI) / 180;
+      switch (axis) {
+        case 'x':
+          mesh.rotateX(radians);
+          break;
+        case 'y':
+          mesh.rotateY(radians);
+          break;
+        case 'z':
+          mesh.rotateZ(radians);
+          break;
+      }
+
+      // Rotate the position around the origin
+      const pos = mesh.position.clone();
+      switch (axis) {
+        case 'x':
+          mesh.position.set(
+            pos.x,
+            pos.y * Math.cos(radians) - pos.z * Math.sin(radians),
+            pos.y * Math.sin(radians) + pos.z * Math.cos(radians)
+          );
+          break;
+        case 'y':
+          mesh.position.set(
+            pos.x * Math.cos(radians) + pos.z * Math.sin(radians),
+            pos.y,
+            -pos.x * Math.sin(radians) + pos.z * Math.cos(radians)
+          );
+          break;
+        case 'z':
+          mesh.position.set(
+            pos.x * Math.cos(radians) - pos.y * Math.sin(radians),
+            pos.x * Math.sin(radians) + pos.y * Math.cos(radians),
+            pos.z
+          );
+          break;
+      }
+
+      mesh.position.add(originVec);
+    }
+
+    return mesh;
+  }
+
+  /**
+   * Creates materials for a simple cube (fallback when no model)
+   */
+  private createCubeMaterials(blockData: BlockData, transparent = false, opacity = 1): THREE.Material[] {
     const { textures, texturesBase64 } = blockData;
     if (!textures || !texturesBase64) {
-      const mat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+      console.warn('⚠️ Block missing textures:', blockData.blockId);
+      const mat = new THREE.MeshLambertMaterial({ color: 0x888888, transparent, opacity });
       return Array(6).fill(mat);
     }
 
-    const faceOrder = ['east', 'west', 'up', 'down', 'south', 'north'];
-    const defaultKeys = ['all', 'side', 'particle'];
+    // Three.js BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z
+    // Which corresponds to: east, west, up, down, south, north
+    const faceMapping: Record<string, string[]> = {
+      east:  ['east', 'right', 'side', 'all'],
+      west:  ['west', 'left', 'side', 'all'],
+      up:    ['up', 'top', 'end', 'all'],
+      down:  ['down', 'bottom', 'end', 'all'],
+      south: ['south', 'front', 'side', 'all'],
+      north: ['north', 'back', 'side', 'all'],
+    };
 
-    // Find default texture
-    let defaultBase64: string | null = null;
-    for (const key of defaultKeys) {
+    const faceOrder = ['east', 'west', 'up', 'down', 'south', 'north'];
+
+    // Find fallback texture (first available)
+    let fallbackBase64: string | null = null;
+    const fallbackKeys = ['all', 'side', 'top', 'front', 'particle'];
+    for (const key of fallbackKeys) {
       const texPath = textures[key];
       if (texPath && texturesBase64[texPath]) {
-        defaultBase64 = texturesBase64[texPath];
+        fallbackBase64 = texturesBase64[texPath];
         break;
       }
     }
-    if (!defaultBase64) {
-      const firstPath = Object.keys(texturesBase64)[0];
-      if (firstPath) defaultBase64 = texturesBase64[firstPath];
+    if (!fallbackBase64) {
+      const firstPath = Object.values(texturesBase64)[0];
+      if (firstPath) fallbackBase64 = firstPath;
     }
 
-    const materials = faceOrder.map((face) => {
-      const texPath = textures[face] || textures['all'] || textures['side'];
-      let base64: string | null = texPath ? (texturesBase64[texPath] ?? null) : null;
-      if (!base64) base64 = defaultBase64;
+    return faceOrder.map((face) => {
+      const alternatives = faceMapping[face];
+      let base64: string | null = null;
+
+      for (const altKey of alternatives) {
+        const texPath = textures[altKey];
+        if (texPath && texturesBase64[texPath]) {
+          base64 = texturesBase64[texPath];
+          break;
+        }
+      }
+
+      if (!base64) base64 = fallbackBase64;
 
       if (base64) {
-        const texture = this.loadTexture(base64, texPath || '');
-        return new THREE.MeshLambertMaterial({ map: texture });
+        const texture = this.loadTexture(base64);
+        return new THREE.MeshLambertMaterial({
+          map: texture,
+          transparent: true, // Always true for PNG alpha support
+          opacity,
+          alphaTest: 0.1, // Discard nearly transparent pixels
+        });
       }
-      return new THREE.MeshLambertMaterial({ color: 0x888888 });
+      return new THREE.MeshLambertMaterial({ color: 0x888888, transparent, opacity });
     });
-
-    this.materialsCache.set(cacheKey, materials);
-    return materials;
   }
 
   // --- Interaction ---
@@ -186,42 +430,74 @@ export class SceneRenderer {
     this.updatePreview();
   }
 
+  private disposeObject3D(obj: THREE.Object3D) {
+    obj.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach(m => m.dispose());
+      }
+    });
+  }
+
   private updatePreview() {
+    // Dispose old preview mesh properly
     if (this.previewMesh) {
       this.scene.remove(this.previewMesh);
+      this.disposeObject3D(this.previewMesh);
       this.previewMesh = null;
     }
 
     if (!this.currentBlockData) return;
 
-    const materials = this.createMaterials(this.currentBlockData).map(m => {
-      const clone = m.clone();
-      clone.transparent = true;
-      clone.opacity = 0.5;
-      return clone;
-    });
+    console.log('🔄 Updating preview for:', this.currentBlockData.blockId, 'has model:', !!this.currentBlockData.model);
 
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    this.previewMesh = new THREE.Mesh(geometry, materials);
+    this.previewMesh = this.createBlockMesh(this.currentBlockData, true, 0.5);
+    this.previewMesh.rotation.y = this.currentYRotation;
     this.previewMesh.visible = false; // Hidden until mouse over valid spot
     this.scene.add(this.previewMesh);
   }
 
-  private getIntersect(event: MouseEvent): THREE.Intersection | null {
+  private getIntersect(event: MouseEvent): { intersection: THREE.Intersection; blockRoot: THREE.Object3D | null } | null {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
-    // Intersect with placed blocks first
-    const blockMeshes = Array.from(this.placedBlocks.values());
-    const blockIntersects = this.raycaster.intersectObjects(blockMeshes);
-    if (blockIntersects.length > 0) return blockIntersects[0];
+    // Intersect with placed blocks first (need to check children for groups)
+    const blockObjects = Array.from(this.placedBlocks.values());
+    const blockIntersects = this.raycaster.intersectObjects(blockObjects, true);
+
+    if (blockIntersects.length > 0) {
+      // Find the root block object that was hit
+      const hitObject = blockIntersects[0].object;
+      let blockRoot: THREE.Object3D | null = null;
+
+      for (const [, block] of this.placedBlocks) {
+        if (block === hitObject || (block instanceof THREE.Group && block.children.includes(hitObject as THREE.Mesh))) {
+          blockRoot = block;
+          break;
+        }
+        // Check nested children
+        let found = false;
+        block.traverse((child) => {
+          if (child === hitObject) found = true;
+        });
+        if (found) {
+          blockRoot = block;
+          break;
+        }
+      }
+
+      return { intersection: blockIntersects[0], blockRoot };
+    }
 
     // Intersect with plane
     const planeIntersects = this.raycaster.intersectObject(this.plane);
-    if (planeIntersects.length > 0) return planeIntersects[0];
+    if (planeIntersects.length > 0) {
+      return { intersection: planeIntersects[0], blockRoot: null };
+    }
 
     return null;
   }
@@ -229,10 +505,19 @@ export class SceneRenderer {
   private onMouseMove(event: MouseEvent) {
     if (!this.previewMesh || !this.currentBlockData) return;
 
-    const intersect = this.getIntersect(event);
-    if (intersect) {
-      const pos = intersect.point.clone().add(intersect.face!.normal!);
-      pos.divideScalar(1).floor().addScalar(0.5); // Snap to grid center
+    const result = this.getIntersect(event);
+    if (result) {
+      const { intersection } = result;
+      const pos = intersection.point.clone();
+      
+      if (intersection.face) {
+        // Move slightly into the face or away from it to ensure correct floor()
+        // To place NEXT to the hit face, we add the normal multiplied by 0.5
+        pos.add(intersection.face.normal.clone().multiplyScalar(0.5));
+      }
+      
+      // Snap to grid
+      pos.floor().addScalar(0.5);
 
       // Check if occupied
       const key = `${pos.x},${pos.y},${pos.z}`;
@@ -250,20 +535,42 @@ export class SceneRenderer {
   private onMouseDown(event: MouseEvent) {
     if (event.button !== 0 && event.button !== 2) return; // Left or Right click
 
-    const intersect = this.getIntersect(event);
-    if (!intersect) return;
+    // Record mouse down position to detect drag vs click
+    this.mouseDownPosition = { x: event.clientX, y: event.clientY };
+  }
+
+  private onMouseUp(event: MouseEvent) {
+    if (!this.mouseDownPosition) return;
+
+    // Check if this was a click (not a drag)
+    const dx = Math.abs(event.clientX - this.mouseDownPosition.x);
+    const dy = Math.abs(event.clientY - this.mouseDownPosition.y);
+    const isClick = dx < this.CLICK_THRESHOLD && dy < this.CLICK_THRESHOLD;
+
+    this.mouseDownPosition = null;
+
+    if (!isClick) return; // It was a drag, don't place/remove
+
+    const result = this.getIntersect(event);
+    if (!result) return;
+
+    const { blockRoot } = result;
 
     // Right Click: Remove
     if (event.button === 2) {
-      if (intersect.object !== this.plane && intersect.object !== this.gridHelper) {
-        // We clicked a block
-        const pos = intersect.object.position;
-        const key = `${pos.x},${pos.y},${pos.z}`;
-        
-        this.scene.remove(intersect.object);
-        this.placedBlocks.delete(key);
-        
-        if (this.onBlockRemoved) this.onBlockRemoved(pos);
+      if (blockRoot) {
+        // Find and remove the block
+        for (const [key, block] of this.placedBlocks) {
+          if (block === blockRoot) {
+            this.scene.remove(block);
+            this.disposeObject3D(block);
+            this.placedBlocks.delete(key);
+
+            const [x, y, z] = key.split(',').map(Number);
+            if (this.onBlockRemoved) this.onBlockRemoved(new THREE.Vector3(x, y, z));
+            break;
+          }
+        }
       }
       return;
     }
@@ -275,13 +582,12 @@ export class SceneRenderer {
 
       if (this.placedBlocks.has(key)) return;
 
-      const materials = this.createMaterials(this.currentBlockData);
-      const geometry = new THREE.BoxGeometry(1, 1, 1);
-      const mesh = new THREE.Mesh(geometry, materials);
-      mesh.position.copy(pos);
-      
-      this.scene.add(mesh);
-      this.placedBlocks.set(key, mesh);
+      const blockMesh = this.createBlockMesh(this.currentBlockData);
+      blockMesh.position.copy(pos);
+      blockMesh.rotation.y = this.currentYRotation;
+
+      this.scene.add(blockMesh);
+      this.placedBlocks.set(key, blockMesh);
 
       if (this.onBlockPlaced) this.onBlockPlaced(pos, this.currentBlockData.blockId);
     }
@@ -294,24 +600,30 @@ export class SceneRenderer {
 
   public dispose() {
     this.renderer.dispose();
-    
+
     // Dispose textures
     this.textureCache.forEach(texture => texture.dispose());
     this.textureCache.clear();
-    
+
     // Dispose materials
     this.materialsCache.forEach(materials => {
       materials.forEach(material => material.dispose());
     });
     this.materialsCache.clear();
 
+    // Dispose placed blocks
+    this.placedBlocks.forEach(block => this.disposeObject3D(block));
+    this.placedBlocks.clear();
+
     // Remove event listeners
     this.renderer.domElement.removeEventListener('mousemove', this.onMouseMove.bind(this));
     this.renderer.domElement.removeEventListener('mousedown', this.onMouseDown.bind(this));
+    this.renderer.domElement.removeEventListener('mouseup', this.onMouseUp.bind(this));
     window.removeEventListener('resize', this.onWindowResize.bind(this));
+    window.removeEventListener('keydown', this.onKeyDown);
 
     if (this.previewMesh) {
-      this.previewMesh.geometry.dispose();
+      this.disposeObject3D(this.previewMesh);
     }
   }
 }

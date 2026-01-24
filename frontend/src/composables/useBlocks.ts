@@ -3,6 +3,33 @@ import { computed, ref, type Ref } from 'vue';
 import { useApi } from './useApi';
 import { renderBlockIconsAsync } from '../services/blockIconRenderer';
 
+// Types pour les éléments de modèle 3D
+export interface ModelElementFace {
+  uv?: [number, number, number, number];
+  texture: string;
+  cullface?: string;
+  rotation?: number;
+  tintindex?: number;
+}
+
+export interface ModelElement {
+  from: [number, number, number];
+  to: [number, number, number];
+  rotation?: {
+    origin: [number, number, number];
+    axis: 'x' | 'y' | 'z';
+    angle: number;
+    rescale?: boolean;
+  };
+  faces: Record<string, ModelElementFace>;
+}
+
+export interface BlockModel3D {
+  modelPath: string;
+  elements: ModelElement[];
+  ambientOcclusion: boolean;
+}
+
 // Types pour la liste (léger)
 export interface BlockListItem {
   _id: string;
@@ -14,6 +41,9 @@ export interface BlockListItem {
   icon3d?: string; // Icône 3D pré-rendue par le backend
   renderedIcon?: string; // Icône 3D rendue côté client (fallback)
   animatedIcon?: string; // GIF animé si disponible
+  textures?: Record<string, string>; // Mapping des textures pour le rendu 3D
+  texturesBase64?: Record<string, string>; // Textures en base64
+  model?: BlockModel3D; // Modèle 3D complet
 }
 
 // Types pour le détail (complet)
@@ -88,6 +118,7 @@ export function useBlocks(options: UseBlocksOptions) {
           order: order?.value || undefined,
           withIcons: 'true',
           withTextures: 'true', // Nécessaire pour le rendu 3D
+          withModel: 'true', // Modèle 3D complet
         },
       });
       return response.data;
@@ -156,6 +187,9 @@ export function useBlocks(options: UseBlocksOptions) {
         icon3d: block.icon3d,
         renderedIcon,
         animatedIcon,
+        textures: block.textures,
+        texturesBase64: block.texturesBase64,
+        model: block.model,
       };
     });
   });

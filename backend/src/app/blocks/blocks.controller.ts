@@ -21,6 +21,7 @@ export class BlocksController {
     @Query('order') order?: 'asc' | 'desc',
     @Query('withIcons') withIcons?: string,
     @Query('withTextures') withTextures?: string,
+    @Query('withModel') withModel?: string,
   ) {
     const filter: BlockFilter = {};
     if (namespace) filter.namespace = namespace;
@@ -39,6 +40,7 @@ export class BlocksController {
         filter,
         pagination,
         withTextures === 'true',
+        withModel === 'true',
       );
     }
 
