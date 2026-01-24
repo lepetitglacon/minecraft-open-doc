@@ -8,9 +8,9 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-EXPOSE 3000
-
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 3000
 
 CMD ["node", "dist/main.js"]
