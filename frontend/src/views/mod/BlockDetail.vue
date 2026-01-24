@@ -93,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import CraftingGrid from '../../components/CraftingGrid.vue';
 import { useApi } from '../../composables/useApi';
@@ -116,6 +116,8 @@ interface Block {
   texturesBase64?: Record<string, string>;
   animatedTextures?: Record<string, string>;
   hasAnimatedTextures?: boolean;
+  renderedIcon?: string;
+  animatedIcon?: string;
 }
 
 interface Recipe {
@@ -137,15 +139,6 @@ const isLoading = ref(true);
 const error = ref<string | null>(null);
 const renderedIcon = ref<string | null>(null);
 const animatedIcon = ref<string | null>(null);
-
-const blockWithIcons = computed(() => {
-  if (!block.value) return null;
-  return {
-    ...block.value,
-    renderedIcon: renderedIcon.value,
-    animatedIcon: animatedIcon.value,
-  };
-});
 
 const getTextureName = (path: string) => {
   const parts = path.split('/');
@@ -191,7 +184,7 @@ const fetchBlock = async () => {
 
     // Récupérer toutes les textures pour le crafting grid
     if (recipes.value.length > 0) {
-      const textureResponse = await api.get(`/textures/by-namespace/${namespace.value}`);
+      await api.get(`/textures/by-namespace/${namespace.value}`);
       // On utilisera les textures du bloc pour l'instant
     }
   } catch (err: any) {

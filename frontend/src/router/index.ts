@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import Home from '../views/Home.vue'
-import Blocks from '../views/mod/tabs/Blocks.vue'
 
 const routes: RouteRecordRaw[] = [
   {

@@ -84,8 +84,9 @@ const triggerFileInput = () => {
 
 const handleFileSelect = (event: Event) => {
   const input = event.target as HTMLInputElement;
-  if (input.files && input.files.length > 0) {
-    selectFile(input.files[0]);
+  const file = input.files?.[0];
+  if (file) {
+    selectFile(file);
   }
 };
 
@@ -93,9 +94,9 @@ const handleDrop = (event: DragEvent) => {
   isDragging.value = false;
   if (isUploading.value) return;
 
-  const files = event.dataTransfer?.files;
-  if (files && files.length > 0) {
-    selectFile(files[0]);
+  const file = event.dataTransfer?.files?.[0];
+  if (file) {
+    selectFile(file);
   }
 };
 

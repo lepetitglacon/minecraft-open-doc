@@ -57,7 +57,6 @@ export class SceneRenderer {
 
   private textureCache = new Map<string, THREE.Texture>();
   private materialsCache = new Map<string, THREE.Material[]>();
-  private geometryCache = new Map<string, THREE.BufferGeometry>();
 
   private placedBlocks: Map<string, THREE.Object3D> = new Map(); // key "x,y,z" -> Mesh/Group
   private previewMesh: THREE.Object3D | null = null;
@@ -215,7 +214,7 @@ export class SceneRenderer {
     return group;
   }
 
-  private createCableMesh(blockData: BlockData, transparent = false, opacity = 1): THREE.Object3D {
+  private createCableMesh(blockData: BlockData, _transparent = false, opacity = 1): THREE.Object3D {
     const group = new THREE.Group();
     group.userData.isCable = true;
     group.userData.connections = {
@@ -259,7 +258,15 @@ export class SceneRenderer {
     const branchLength = (1 - diameter) / 2;
     const branchOffset = diameter / 2 + branchLength / 2;
 
-    const branches = [
+    interface BranchDef {
+      name: string;
+      dir: [number, number, number];
+      size: [number, number, number];
+      pos: [number, number, number];
+      rotateFaces: number[];
+    }
+
+    const branches: BranchDef[] = [
       { name: 'east',  dir: [1, 0, 0], size: [branchLength, diameter, diameter], pos: [branchOffset, 0, 0], rotateFaces: [2, 3, 4, 5] },
       { name: 'west',  dir: [-1, 0, 0], size: [branchLength, diameter, diameter], pos: [-branchOffset, 0, 0], rotateFaces: [2, 3, 4, 5] },
       { name: 'up',    dir: [0, 1, 0], size: [diameter, branchLength, diameter], pos: [0, branchOffset, 0], rotateFaces: [] },
@@ -276,7 +283,7 @@ export class SceneRenderer {
         const uvAttribute = geo.getAttribute('uv');
         for (const faceIndex of b.rotateFaces) {
           // Each face has 4 vertices in standard BoxGeometry (non-indexed or separate faces)
-          const offset = faceIndex * 4;
+          const offset = (faceIndex ?? 0) * 4;
           
           for (let i = 0; i < 4; i++) {
             const u = uvAttribute.getX(offset + i);
@@ -492,7 +499,7 @@ export class SceneRenderer {
     }
 
     return faceOrder.map((face) => {
-      const alternatives = faceMapping[face];
+      const alternatives = faceMapping[face] || [];
       let base64: string | null = null;
 
       for (const altKey of alternatives) {
@@ -570,9 +577,10 @@ export class SceneRenderer {
     const blockObjects = Array.from(this.placedBlocks.values());
     const blockIntersects = this.raycaster.intersectObjects(blockObjects, true);
 
-    if (blockIntersects.length > 0) {
+    const firstBlockIntersect = blockIntersects[0];
+    if (firstBlockIntersect) {
       // Find the root block object that was hit
-      const hitObject = blockIntersects[0].object;
+      const hitObject = firstBlockIntersect.object;
       let blockRoot: THREE.Object3D | null = null;
 
       for (const [, block] of this.placedBlocks) {
@@ -591,13 +599,14 @@ export class SceneRenderer {
         }
       }
 
-      return { intersection: blockIntersects[0], blockRoot };
+      return { intersection: firstBlockIntersect, blockRoot };
     }
 
     // Intersect with plane
     const planeIntersects = this.raycaster.intersectObject(this.plane);
-    if (planeIntersects.length > 0) {
-      return { intersection: planeIntersects[0], blockRoot: null };
+    const firstPlaneIntersect = planeIntersects[0];
+    if (firstPlaneIntersect) {
+      return { intersection: firstPlaneIntersect, blockRoot: null };
     }
 
     return null;

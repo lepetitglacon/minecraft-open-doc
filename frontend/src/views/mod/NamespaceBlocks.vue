@@ -19,7 +19,6 @@ const {
   totalPages,
   isLoading,
   error,
-  renderIcons,
 } = useBlocks({
   namespace,
   search,

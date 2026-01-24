@@ -14,7 +14,7 @@
           <img
             v-if="slot.texture"
             :src="slot.texture"
-            :alt="slot.itemId"
+            :alt="slot.itemId ?? undefined"
             class="slot-icon"
           />
           <span v-else-if="slot.itemId" class="slot-placeholder">
@@ -94,9 +94,10 @@ const gridSlots = computed<GridSlot[]>(() => {
 
     for (let row = 0; row < pattern.length && row < 3; row++) {
       const line = pattern[row];
+      if (!line) continue;
       for (let col = 0; col < line.length && col < 3; col++) {
         const char = line[col];
-        if (char !== ' ' && key[char]) {
+        if (char && char !== ' ' && key[char]) {
           const ingredient = key[char];
           const itemId = ingredient.item || ingredient.tag || null;
           slots[row * 3 + col] = {
