@@ -2,7 +2,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
-import { useApi } from '../composables/useApi';
+import {baseUrl, useApi} from '../composables/useApi';
 
 interface StepProgress {
   current: number;
@@ -126,7 +126,7 @@ const formatFileSize = (bytes: number): string => {
 const setupSSE = () => {
   if (eventSource) return;
   
-  eventSource = new EventSource('http://localhost:3000/parser/upload');
+  eventSource = new EventSource(`${baseUrl}/parser/upload`);
   
   eventSource.onmessage = (event) => {
     try {
