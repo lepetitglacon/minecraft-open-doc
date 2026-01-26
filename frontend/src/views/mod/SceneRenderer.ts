@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import gltf_scene_test from '../../assets/export_20260126_015944.gltf?url'
-import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader";
+import gltf_scene_test from '../../assets/export_20260126_040516.gltf?url'
+import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader.js";
 
 interface TextureMapping {
   [key: string]: string;
@@ -78,6 +78,7 @@ export class SceneRenderer {
   public onBlockPlaced?: (position: THREE.Vector3, blockId: string) => void;
   public onBlockRemoved?: (position: THREE.Vector3) => void;
   public onBlockPicked?: (blockId: string) => void;
+  public onBlocksDetected?: (blockIds: string[]) => void;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -161,6 +162,7 @@ export class SceneRenderer {
     const gltf = await loader.loadAsync(gltf_scene_test);
     
     const blocksToTransfer: THREE.Mesh[] = [];
+    const detectedBlockIds = new Set<string>();
     
     // Calculate bounds for adaptive grid
     const min = new THREE.Vector3(Infinity, Infinity, Infinity);
@@ -176,27 +178,30 @@ export class SceneRenderer {
         const materials = Array.isArray(child.material) ? child.material : [child.material];
         
         materials.forEach((material: THREE.Material) => {
-          if ('map' in material && material.map) {
-            material.map.magFilter = THREE.NearestFilter;
-            material.map.minFilter = THREE.NearestFilter;
-            material.map.generateMipmaps = false;
-            material.map.needsUpdate = true;
+          const mat = material as THREE.MeshStandardMaterial;
+          if (mat.map) {
+            mat.map.magFilter = THREE.NearestFilter;
+            mat.map.minFilter = THREE.NearestFilter;
+            mat.map.generateMipmaps = false;
+            mat.map.needsUpdate = true;
           }
-          if ('emissiveMap' in material && material.emissiveMap) {
-              material.emissiveMap.magFilter = THREE.NearestFilter;
-              material.emissiveMap.minFilter = THREE.NearestFilter;
-              material.emissiveMap.generateMipmaps = false;
-              material.emissiveMap.needsUpdate = true;
+          if (mat.emissiveMap) {
+            mat.emissiveMap.magFilter = THREE.NearestFilter;
+            mat.emissiveMap.minFilter = THREE.NearestFilter;
+            mat.emissiveMap.generateMipmaps = false;
+            mat.emissiveMap.needsUpdate = true;
           }
-          if (material.transparent) {
-             material.alphaTest = 0.5;
+          if (mat.transparent) {
+            mat.alphaTest = 0.5;
           }
         });
 
         // Check if it is a block we should manage
         const blockId = child.userData.name || child.userData.blockId || child.userData.id;
-        if (blockId && typeof blockId === 'string' && blockId.includes('.')) {
+        // Relaxed condition: Just check if we have a non-empty string ID
+        if (blockId && typeof blockId === 'string' && blockId.trim().length > 0) {
           blocksToTransfer.push(child);
+          detectedBlockIds.add(blockId);
           
           // Update bounds
           child.geometry.computeBoundingBox();
@@ -206,9 +211,16 @@ export class SceneRenderer {
           min.min(bbox.min);
           max.max(bbox.max);
           hasBlocks = true;
+        } else {
+             // Debug: Log why we skipped it
+             // console.log('Skipping object:', child.name, child.userData);
         }
       }
     });
+
+    if (this.onBlocksDetected) {
+      this.onBlocksDetected(Array.from(detectedBlockIds));
+    }
 
     // 2. Transfer blocks to the main scene
     blocksToTransfer.forEach(child => {
@@ -870,7 +882,8 @@ export class SceneRenderer {
   }
 
   private onMouseDown(event: MouseEvent) {
-    if (event.button !== 0 && event.button !== 2) return; // Left or Right click
+    // Allow Left (0), Middle (1), and Right (2) clicks
+    if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
     this.mouseDownPosition = { x: event.clientX, y: event.clientY };
   }
 

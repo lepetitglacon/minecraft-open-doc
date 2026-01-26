@@ -77,7 +77,8 @@ interface BlocksResponse {
 }
 
 interface UseBlocksOptions {
-  namespace: Ref<string>;
+  namespace?: Ref<string | undefined>;
+  blockIds?: Ref<string[] | undefined>;
   search?: Ref<string>;
   page?: Ref<number>;
   limit?: number;
@@ -93,11 +94,12 @@ const renderedIconsCache = new Map<string, string>();
  */
 export function useBlocks(options: UseBlocksOptions) {
   const api = useApi();
-  const { namespace, search, page, limit = 100, sort, order } = options;
+  const { namespace, blockIds, search, page, limit = 100, sort, order } = options;
 
   const queryKey = computed(() => [
     'blocks',
-    namespace.value,
+    namespace?.value || 'all',
+    blockIds?.value?.join(',') || 'none',
     search?.value || '',
     page?.value || 1,
     limit,
@@ -110,7 +112,8 @@ export function useBlocks(options: UseBlocksOptions) {
     queryFn: async (): Promise<BlocksResponse> => {
       const response = await api.get('/blocks', {
         params: {
-          namespace: namespace.value,
+          namespace: namespace?.value || undefined,
+          blockIds: blockIds?.value?.join(',') || undefined,
           search: search?.value || undefined,
           page: page?.value || 1,
           limit,
@@ -123,7 +126,8 @@ export function useBlocks(options: UseBlocksOptions) {
       });
       return response.data;
     },
-    enabled: computed(() => !!namespace.value),
+    // Always enabled, unless specific logic requires namespace
+    enabled: true,
   });
 
   // Icônes 3D rendues

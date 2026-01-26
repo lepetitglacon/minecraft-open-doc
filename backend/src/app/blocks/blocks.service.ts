@@ -12,6 +12,7 @@ export interface BlockFilter {
   modVersion?: string;
   minecraftVersion?: string;
   search?: string;
+  blockIds?: string[]; // Add support for multiple specific block IDs
 }
 
 export interface PaginationOptions {
@@ -95,6 +96,10 @@ export class BlocksService {
 
     if (filter.namespace) {
       query.namespace = filter.namespace;
+    }
+
+    if (filter.blockIds && filter.blockIds.length > 0) {
+      query.blockId = { $in: filter.blockIds };
     }
 
     if (filter.modVersion) {

@@ -115,9 +115,17 @@ const search = ref('');
 const page = ref(1);
 const sort = ref('registryName');
 const order = ref<'asc' | 'desc'>('asc');
+const detectedBlockIds = ref<string[]>([]);
 
 const { blocks, isLoading } = useBlocks({
-  namespace: computed(() => props.namespace),
+  namespace: computed(() => {
+    // If search contains a dot (e.g. "block.minecraft.stone"), we search globally
+    if (search.value && search.value.includes('.')) {
+      return undefined;
+    }
+    return props.namespace;
+  }),
+  blockIds: detectedBlockIds,
   search,
   page,
   limit: 200,
@@ -215,6 +223,10 @@ onMounted(() => {
     renderer = new SceneRenderer(viewportRef.value);
     renderer.init()
     
+    renderer.onBlocksDetected = (ids) => {
+      detectedBlockIds.value = ids;
+    };
+
     renderer.onBlockPlaced = (pos, blockId) => {
       placedBlocks.value.push({ x: pos.x, y: pos.y, z: pos.z, blockId });
     };

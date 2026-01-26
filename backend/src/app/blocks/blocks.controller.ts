@@ -12,6 +12,7 @@ export class BlocksController {
   @Get()
   async findAll(
     @Query('namespace') namespace?: string,
+    @Query('blockIds') blockIds?: string, // Comma-separated list
     @Query('modVersion') modVersion?: string,
     @Query('minecraftVersion') minecraftVersion?: string,
     @Query('search') search?: string,
@@ -25,6 +26,7 @@ export class BlocksController {
   ) {
     const filter: BlockFilter = {};
     if (namespace) filter.namespace = namespace;
+    if (blockIds) filter.blockIds = blockIds.split(',').map(id => id.trim());
     if (modVersion) filter.modVersion = modVersion;
     if (minecraftVersion) filter.minecraftVersion = minecraftVersion;
     if (search) filter.search = search;
