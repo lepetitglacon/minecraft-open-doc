@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import gltf_scene_test from '../../assets/export_20260126_015944.gltf?url'
+import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader";
 
 interface TextureMapping {
   [key: string]: string;
@@ -43,12 +45,14 @@ export interface BlockData {
   model?: BlockModel3D;
 }
 
+export type BackgroundType = 'overworld' | 'nether' | 'end' | 'void';
+
 export class SceneRenderer {
   public scene: THREE.Scene;
   public camera: THREE.PerspectiveCamera;
   public renderer: THREE.WebGLRenderer;
   public controls: OrbitControls;
-  
+
   private container: HTMLElement;
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
@@ -65,6 +69,7 @@ export class SceneRenderer {
   private currentBlockData: BlockData | null = null;
   private currentYRotation: number = 0;
   private isConnectionMode: boolean = false;
+  private currentBackground: BackgroundType = 'void';
 
   // Drag detection
   private mouseDownPosition: { x: number; y: number } | null = null;
@@ -106,8 +111,22 @@ export class SceneRenderer {
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     this.scene.add(ambientLight);
     
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    // Directional Light with Hard Shadows
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
     dirLight.position.set(10, 20, 10);
+    dirLight.castShadow = true;
+    
+    // Optimize shadow map for pixel art style
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 50;
+    dirLight.shadow.camera.left = -15;
+    dirLight.shadow.camera.right = 15;
+    dirLight.shadow.camera.top = 15;
+    dirLight.shadow.camera.bottom = -15;
+    dirLight.shadow.bias = -0.0005;
+    
     this.scene.add(dirLight);
 
     // Grid
@@ -124,12 +143,96 @@ export class SceneRenderer {
     // Raycaster
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
+    
+    // Enable shadow map
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Slightly soft edges, but still distinct
 
     // Events
     this.bindEvents();
     
     // Start Loop
     this.animate();
+  }
+
+  async init() {
+    const loader = new GLTFLoader();
+    const gltf = await loader.loadAsync(gltf_scene_test);
+    
+    const blocksToTransfer: THREE.Mesh[] = [];
+
+    // 1. Traverse and prepare blocks (fix textures, identify valid blocks)
+    gltf.scene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        
+        materials.forEach((material: THREE.Material) => {
+          if ('map' in material && material.map) {
+            material.map.magFilter = THREE.NearestFilter;
+            material.map.minFilter = THREE.NearestFilter;
+            material.map.generateMipmaps = false;
+            material.map.needsUpdate = true;
+          }
+          if ('emissiveMap' in material && material.emissiveMap) {
+              material.emissiveMap.magFilter = THREE.NearestFilter;
+              material.emissiveMap.minFilter = THREE.NearestFilter;
+              material.emissiveMap.generateMipmaps = false;
+              material.emissiveMap.needsUpdate = true;
+          }
+          if (material.transparent) {
+             material.alphaTest = 0.5;
+          }
+        });
+
+        // Check if it is a block we should manage
+        const blockId = child.userData.name || child.userData.blockId || child.userData.id;
+        if (blockId && typeof blockId === 'string' && blockId.includes('.')) {
+          blocksToTransfer.push(child);
+        }
+      }
+    });
+
+    // 2. Transfer blocks to the main scene
+    // We use attach to preserve world transforms (position/rotation/scale) 
+    // while changing the parent to this.scene
+    blocksToTransfer.forEach(child => {
+      this.scene.attach(child);
+
+      const pos = new THREE.Vector3();
+      child.getWorldPosition(pos);
+      
+      const x = Math.floor(pos.x) + 0.5;
+      const y = Math.floor(pos.y) + 0.5;
+      const z = Math.floor(pos.z) + 0.5;
+      
+      const key = `${x},${y},${z}`;
+      this.placedBlocks.set(key, child);
+    });
+
+    // We do NOT add gltf.scene to this.scene anymore, 
+    // as we have extracted the relevant blocks.
+  }
+
+  public setShadows(enabled: boolean) {
+    this.renderer.shadowMap.enabled = enabled;
+    
+    // Toggle castShadow for directional lights
+    this.scene.traverse((object) => {
+      if (object instanceof THREE.DirectionalLight) {
+        object.castShadow = enabled;
+      }
+    });
+    
+    // Update materials to ensure shadow maps are recompiled/removed
+    this.scene.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach(m => m.needsUpdate = true);
+        }
+    });
   }
 
   private bindEvents() {
@@ -175,6 +278,7 @@ export class SceneRenderer {
     const texture = loader.load(base64);
     texture.magFilter = THREE.NearestFilter;
     texture.minFilter = THREE.NearestFilter;
+    texture.generateMipmaps = false;
     texture.colorSpace = THREE.SRGBColorSpace;
 
     this.textureCache.set(cacheKey, texture);
@@ -851,5 +955,40 @@ export class SceneRenderer {
     if (this.connectionPreviewMesh) {
       this.disposeObject3D(this.connectionPreviewMesh);
     }
+  }
+
+  /**
+   * Sets the scene background based on Minecraft dimension
+   */
+  public setBackground(type: BackgroundType) {
+    this.currentBackground = type;
+
+    // Background colors matching Minecraft dimensions
+    const backgrounds: Record<BackgroundType, number> = {
+      overworld: 0x87CEEB, // Sky blue
+      nether: 0x1a0a0a,    // Dark red/black
+      end: 0x0a0a14,       // Dark purple/black
+      void: 0x1a1a2e,      // Current dark blue
+    };
+
+    // Grid colors matching dimensions
+    const gridColors: Record<BackgroundType, { main: number; secondary: number }> = {
+      overworld: { main: 0x5c8a3d, secondary: 0x3d5c28 }, // Grass green
+      nether: { main: 0x8b0000, secondary: 0x4a0000 },    // Dark red
+      end: { main: 0x3d3d5c, secondary: 0x28283d },      // End stone purple
+      void: { main: 0x444444, secondary: 0x222222 },     // Gray
+    };
+
+    this.scene.background = new THREE.Color(backgrounds[type]);
+
+    // Update grid colors
+    const colors = gridColors[type];
+    this.scene.remove(this.gridHelper);
+    this.gridHelper = new THREE.GridHelper(20, 20, colors.main, colors.secondary);
+    this.scene.add(this.gridHelper);
+  }
+
+  public getBackground(): BackgroundType {
+    return this.currentBackground;
   }
 }

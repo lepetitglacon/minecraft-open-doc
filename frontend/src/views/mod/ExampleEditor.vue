@@ -55,13 +55,27 @@
         Left Click: Place | Right Click: Remove | Drag: Rotate | Scroll: Zoom
       </div>
       <div class="viewport-tools">
-        <button 
-          class="tool-btn" 
-          :class="{ active: isConnectionMode }" 
+        <select v-model="selectedBackground" @change="onBackgroundChange" class="background-select">
+          <option value="overworld">Overworld</option>
+          <option value="nether">Nether</option>
+          <option value="end">End</option>
+          <option value="void">Void</option>
+        </select>
+        <button
+          class="tool-btn"
+          :class="{ active: isShadowsEnabled }"
+          @click="toggleShadows"
+          title="Toggle Shadows"
+        >
+          Shadows
+        </button>
+        <button
+          class="tool-btn"
+          :class="{ active: isConnectionMode }"
           @click="toggleConnectionMode"
           title="Toggle Edit Mode"
         >
-          ✏️ Edit
+          Edit
         </button>
       </div>
     </div>
@@ -84,7 +98,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useBlocks } from '../../composables/useBlocks';
-import { SceneRenderer } from './SceneRenderer';
+import { SceneRenderer, type BackgroundType } from './SceneRenderer';
 import { useApi } from '../../composables/useApi';
 import { useRouter } from 'vue-router';
 
@@ -126,6 +140,14 @@ const viewportRef = ref<HTMLElement | null>(null);
 let renderer: SceneRenderer | null = null;
 const selectedBlock = ref<any>(null);
 const isConnectionMode = ref(false);
+const isShadowsEnabled = ref(true);
+const selectedBackground = ref<BackgroundType>('void');
+
+const onBackgroundChange = () => {
+  if (renderer) {
+    renderer.setBackground(selectedBackground.value);
+  }
+};
 
 const placedBlocks = ref<Array<{x: number, y: number, z: number, blockId: string}>>([]);
 
@@ -133,6 +155,13 @@ const toggleConnectionMode = () => {
   isConnectionMode.value = !isConnectionMode.value;
   if (renderer) {
     renderer.setConnectionMode(isConnectionMode.value);
+  }
+};
+
+const toggleShadows = () => {
+  isShadowsEnabled.value = !isShadowsEnabled.value;
+  if (renderer) {
+    renderer.setShadows(isShadowsEnabled.value);
   }
 };
 
@@ -184,6 +213,7 @@ const saveScene = async () => {
 onMounted(() => {
   if (viewportRef.value) {
     renderer = new SceneRenderer(viewportRef.value);
+    renderer.init()
     
     renderer.onBlockPlaced = (pos, blockId) => {
       placedBlocks.value.push({ x: pos.x, y: pos.y, z: pos.z, blockId });
@@ -341,6 +371,25 @@ onUnmounted(() => {
   right: 10px;
   display: flex;
   gap: 10px;
+}
+
+.background-select {
+  background-color: #2a2a2a;
+  border: 2px solid #000;
+  color: white;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: 'Minecraft', monospace;
+  font-size: 0.9rem;
+}
+
+.background-select:hover {
+  background-color: #333;
+}
+
+.background-select option {
+  background-color: #2a2a2a;
+  color: white;
 }
 
 .tool-btn {
