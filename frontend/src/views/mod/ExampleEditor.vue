@@ -223,6 +223,15 @@ onMounted(() => {
       const idx = placedBlocks.value.findIndex(b => b.x === pos.x && b.y === pos.y && b.z === pos.z);
       if (idx !== -1) placedBlocks.value.splice(idx, 1);
     };
+    
+    renderer.onBlockPicked = (blockId) => {
+      const found = blocks.value.find(b => b.blockId === blockId);
+      if (found) {
+        selectBlock(found);
+      } else {
+        search.value = blockId; // Filter the list to find it if possible
+      }
+    };
   }
 });
 

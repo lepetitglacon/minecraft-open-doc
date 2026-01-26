@@ -77,6 +77,7 @@ export class SceneRenderer {
 
   public onBlockPlaced?: (position: THREE.Vector3, blockId: string) => void;
   public onBlockRemoved?: (position: THREE.Vector3) => void;
+  public onBlockPicked?: (blockId: string) => void;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -129,12 +130,12 @@ export class SceneRenderer {
     
     this.scene.add(dirLight);
 
-    // Grid
+    // Grid (Default, will be resized in init)
     this.gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
     this.scene.add(this.gridHelper);
 
     // Invisible Ground Plane (for raycasting)
-    const planeGeo = new THREE.PlaneGeometry(20, 20);
+    const planeGeo = new THREE.PlaneGeometry(100, 100); // Increased size
     planeGeo.rotateX(-Math.PI / 2);
     const planeMat = new THREE.MeshBasicMaterial({ visible: false });
     this.plane = new THREE.Mesh(planeGeo, planeMat);
@@ -160,6 +161,11 @@ export class SceneRenderer {
     const gltf = await loader.loadAsync(gltf_scene_test);
     
     const blocksToTransfer: THREE.Mesh[] = [];
+    
+    // Calculate bounds for adaptive grid
+    const min = new THREE.Vector3(Infinity, Infinity, Infinity);
+    const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+    let hasBlocks = false;
 
     // 1. Traverse and prepare blocks (fix textures, identify valid blocks)
     gltf.scene.traverse((child) => {
@@ -191,13 +197,20 @@ export class SceneRenderer {
         const blockId = child.userData.name || child.userData.blockId || child.userData.id;
         if (blockId && typeof blockId === 'string' && blockId.includes('.')) {
           blocksToTransfer.push(child);
+          
+          // Update bounds
+          child.geometry.computeBoundingBox();
+          const bbox = child.geometry.boundingBox!.clone();
+          bbox.applyMatrix4(child.matrixWorld);
+          
+          min.min(bbox.min);
+          max.max(bbox.max);
+          hasBlocks = true;
         }
       }
     });
 
     // 2. Transfer blocks to the main scene
-    // We use attach to preserve world transforms (position/rotation/scale) 
-    // while changing the parent to this.scene
     blocksToTransfer.forEach(child => {
       this.scene.attach(child);
 
@@ -211,9 +224,29 @@ export class SceneRenderer {
       const key = `${x},${y},${z}`;
       this.placedBlocks.set(key, child);
     });
+    
+    // 3. Update Grid Size
+    if (hasBlocks) {
+        const sizeX = Math.abs(max.x - min.x);
+        const sizeZ = Math.abs(max.z - min.z);
+        const maxSize = Math.max(sizeX, sizeZ, 20); // Min 20
+        const gridSize = Math.ceil(maxSize / 2) * 2 + 10; // Add padding and ensure even
+        
+        // Center the grid
+        const centerX = (min.x + max.x) / 2;
+        const centerZ = (min.z + max.z) / 2;
+        
+        this.scene.remove(this.gridHelper);
+        this.gridHelper = new THREE.GridHelper(gridSize, gridSize, 0x444444, 0x222222);
+        this.gridHelper.position.set(Math.floor(centerX), 0, Math.floor(centerZ));
+        this.scene.add(this.gridHelper);
 
-    // We do NOT add gltf.scene to this.scene anymore, 
-    // as we have extracted the relevant blocks.
+        // Center Camera on the scene
+        this.controls.target.set(centerX, 0, centerZ);
+        const distance = Math.max(sizeX, sizeZ) * 0.8 + 5; // Distance based on scene size
+        this.camera.position.set(centerX + distance, distance * 0.8 + 5, centerZ + distance);
+        this.controls.update();
+    }
   }
 
   public setShadows(enabled: boolean) {
@@ -853,6 +886,17 @@ export class SceneRenderer {
     const result = this.getIntersect(event);
     if (!result) return;
     const { blockRoot, intersection } = result;
+    
+    // Middle Click: Pick Block
+    if (event.button === 1) {
+       if (blockRoot && this.onBlockPicked) {
+           const blockId = blockRoot.userData.name || blockRoot.userData.blockId || blockRoot.userData.id;
+           if (blockId) {
+               this.onBlockPicked(blockId);
+           }
+       }
+       return;
+    }
 
     // Edit Mode (Connection Toggling)
     if (this.isConnectionMode && event.button === 0) {
