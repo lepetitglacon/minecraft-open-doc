@@ -6,7 +6,7 @@
       </TooltipTrigger>
       <TooltipPortal>
         <TooltipContent
-          class="minecraft-tooltip"
+          class="z-50 bg-[#100010f0] border-2 border-t-[#5000ff] border-l-[#5000ff] border-r-[#28007f] border-b-[#28007f] text-white px-2 py-1 font-[var(--font-minecraft)] text-base shadow-[4px_4px_4px_#00000080,inset_2px_2px_0_#ffffff1a] max-w-[300px] break-words pointer-events-none"
           :side-offset="5"
         >
           <slot name="content">{{ content }}</slot>
@@ -29,24 +29,3 @@ defineProps<{
   content?: string
 }>()
 </script>
-
-<style scoped>
-.minecraft-tooltip {
-  z-index: 100;
-  background-color: rgba(16, 0, 16, 0.94); /* Minecraft tooltip background */
-  border: 2px solid;
-  border-color: #5000ff #28007f #28007f #5000ff; /* Purple gradient-like border */
-  color: #ffffff;
-  padding: 4px 8px;
-  font-family: 'Minecraft', monospace, sans-serif;
-  font-size: 1rem;
-  line-height: 1.2;
-  text-shadow: 2px 2px #000000;
-  box-shadow: 
-    4px 4px 4px rgba(0, 0, 0, 0.5),
-    inset 2px 2px 0 rgba(255, 255, 255, 0.1);
-  pointer-events: none; /* Tooltips usually don't block interactions */
-  max-width: 300px;
-  word-wrap: break-word;
-}
-</style>

@@ -1,30 +1,40 @@
 <template>
-  <div id="app">
-    <Navbar />
-    <main>
+  <div class="min-h-screen flex flex-col bg-[var(--color-mc-bg)]">
+    <header class="sticky top-0 z-50 flex flex-col">
+      <Navbar />
       <Breadcrumb />
-      <router-view />
+    </header>
+    <main class="flex-1 container mx-auto p-6">
+      <router-view v-slot="{ Component }">
+        <transition name="fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
     </main>
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent } from 'vue'
-import Navbar from './components/Navbar.vue'
-import Breadcrumb from './components/Breadcrumb.vue'
+<script setup lang="ts">
+import { onMounted } from 'vue'
+import Navbar from './components/layout/Navbar.vue'
+import Breadcrumb from './components/layout/Breadcrumb.vue'
+import { useAuthStore } from './stores/auth'
 
-export default defineComponent({
-  name: 'App',
-  components: {
-    Navbar,
-    Breadcrumb
-  }
+const authStore = useAuthStore()
+
+onMounted(() => {
+  authStore.fetchProfile()
 })
 </script>
 
 <style>
-/* Global styles will be added to style.css */
-main {
-  padding: 20px;
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

@@ -1,8 +1,7 @@
-
-
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
-import {baseUrl, useApi} from '../composables/useApi';
+import { baseUrl, useApi } from '../composables/useApi';
+import { UploadCloud, Loader2, Check, X, Circle, Package } from 'lucide-vue-next';
 
 interface StepProgress {
   current: number;
@@ -193,16 +192,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="upload-container">
-    <div class="upload-card">
-      <h1 class="upload-title">Upload Mod</h1>
-      <p class="upload-description">
+  <div class="flex justify-center items-center min-h-[calc(100vh-200px)] p-5">
+    <div class="bg-[#2a2a2a] border-2 border-[#555] rounded-lg p-8 max-w-[500px] w-full text-center shadow-xl">
+      <h1 class="font-[var(--font-minecraft)] text-3xl text-white mb-3">Upload Mod</h1>
+      <p class="text-[#888] mb-6 text-sm">
         Upload a Minecraft mod JAR file to parse its blocks and textures.
       </p>
 
       <div
-        class="upload-dropzone"
-        :class="{ 'dropzone-active': isDragging, 'dropzone-disabled': isUploading }"
+        class="border-4 border-dashed border-[#555] rounded-lg p-10 cursor-pointer transition-all bg-[#1a1a1a] hover:border-[#888] hover:bg-[#222]"
+        :class="{ '!border-[var(--color-mc-link)] !bg-[#2a2a1a]': isDragging, 'cursor-default hover:!border-[#555] hover:!bg-[#1a1a1a]': isUploading }"
         @dragover.prevent="isDragging = true"
         @dragleave.prevent="isDragging = false"
         @drop.prevent="handleDrop"
@@ -216,37 +215,37 @@ onUnmounted(() => {
           hidden
         />
 
-        <!-- Progress avec steps -->
-        <div v-if="isUploading" class="upload-progress">
-          <div class="progress-header">
-            <div class="spinner"></div>
-            <p>Parsing {{ selectedFile?.name }}...</p>
+        <!-- Progress with steps -->
+        <div v-if="isUploading" class="text-left">
+          <div class="flex items-center justify-center gap-3 mb-5">
+            <Loader2 class="w-6 h-6 animate-spin text-[var(--color-mc-link)]" />
+            <p class="text-white text-sm m-0">Parsing {{ selectedFile?.name }}...</p>
           </div>
 
-          <div class="steps-list">
+          <div class="flex flex-col gap-2">
             <div
               v-for="step in steps"
               :key="step.name"
-              class="step-item"
+              class="flex items-center gap-3 p-2 rounded bg-[#222] transition-all"
               :class="{
-                'step-pending': step.status === 'pending',
-                'step-running': step.status === 'running',
-                'step-completed': step.status === 'completed',
-                'step-error': step.status === 'error',
+                'opacity-50': step.status === 'pending',
+                'bg-[#2a2a1a] border-l-2 border-[var(--color-mc-link)]': step.status === 'running',
+                'bg-[#1a2a1a]': step.status === 'completed',
+                'bg-[#2a1a1a] border-l-2 border-red-500': step.status === 'error',
               }"
             >
-              <div class="step-icon">
-                <span v-if="step.status === 'pending'">○</span>
-                <span v-else-if="step.status === 'running'" class="step-spinner">◐</span>
-                <span v-else-if="step.status === 'completed'">✓</span>
-                <span v-else>✗</span>
+              <div class="w-5 text-center flex justify-center">
+                <Circle v-if="step.status === 'pending'" class="w-4 h-4 text-[#555]" />
+                <Loader2 v-else-if="step.status === 'running'" class="w-4 h-4 animate-spin text-[var(--color-mc-link)]" />
+                <Check v-else-if="step.status === 'completed'" class="w-4 h-4 text-green-500" />
+                <X v-else class="w-4 h-4 text-red-500" />
               </div>
-              <div class="step-content">
-                <span class="step-name">{{ getStepLabel(step.name) }}</span>
-                <span v-if="step.progress" class="step-progress">
+              <div class="flex-1 flex items-center gap-2 flex-wrap">
+                <span class="text-gray-300 text-xs">{{ getStepLabel(step.name) }}</span>
+                <span v-if="step.progress" class="text-[#888] text-[10px] bg-[#333] px-1.5 rounded">
                   {{ step.progress.current }}/{{ step.progress.total }}
                 </span>
-                <span v-if="step.message && step.status === 'completed'" class="step-message">
+                <span v-if="step.message && step.status === 'completed'" class="text-[#666] text-[10px] ml-auto">
                   {{ step.message }}
                 </span>
               </div>
@@ -254,344 +253,58 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div v-else-if="selectedFile" class="upload-selected">
-          <div class="file-icon">📦</div>
-          <p class="file-name">{{ selectedFile.name }}</p>
-          <p class="file-size">{{ formatFileSize(selectedFile.size) }}</p>
-          <button class="upload-btn" @click.stop="uploadFile">
-            Parse Mod
-          </button>
-          <button class="cancel-btn" @click.stop="clearSelection">
-            Cancel
-          </button>
+        <div v-else-if="selectedFile" class="flex flex-col items-center gap-2">
+          <Package class="w-12 h-12 text-white mb-2" />
+          <p class="text-white font-bold break-all m-0">{{ selectedFile.name }}</p>
+          <p class="text-[#888] text-xs m-0">{{ formatFileSize(selectedFile.size) }}</p>
+          
+          <div class="mt-4 flex gap-2">
+            <button 
+                class="minecraft-btn !bg-[#4a4] hover:!bg-[#5b5] !py-2 !px-4 !text-sm"
+                @click.stop="uploadFile"
+            >
+                Parse Mod
+            </button>
+            <button 
+                class="minecraft-btn !bg-transparent !border-0 text-[#888] hover:text-white !shadow-none !py-2 !px-4 !text-sm"
+                @click.stop="clearSelection"
+            >
+                Cancel
+            </button>
+          </div>
         </div>
 
-        <div v-else class="upload-placeholder">
-          <div class="upload-icon">📁</div>
-          <p>Drag & drop a .jar file here</p>
-          <p class="upload-hint">or click to browse</p>
+        <div v-else class="flex flex-col items-center gap-2">
+          <UploadCloud class="w-12 h-12 text-[#555] mb-2" />
+          <p class="text-[#aaa] m-0">Drag & drop a .jar file here</p>
+          <p class="text-[#666] text-xs m-0">or click to browse</p>
         </div>
       </div>
 
-      <!-- Résultat -->
-      <div v-if="result" class="upload-result" :class="{ 'result-success': result.success, 'result-error': !result.success }">
-        <div v-if="result.success" class="result-content">
-          <h3>✓ {{ result.mod?.displayName || result.mod?.modId }}</h3>
-          <p>Version: {{ result.mod?.modVersion }} (MC {{ result.mod?.minecraftVersion }})</p>
-          <div class="result-stats">
-            <span>{{ result.blocksCreated }} blocks</span>
-            <span>{{ result.texturesCreated }} textures</span>
-            <span>{{ result.modelsCreated }} models</span>
-            <span>{{ result.iconsGenerated }} icons</span>
+      <!-- Result -->
+      <div v-if="result" class="mt-6 p-4 rounded-lg text-left" :class="result.success ? 'bg-[#1a2a1a] border border-[#4a4]' : 'bg-[#2a1a1a] border border-[#a44]'">
+        <div v-if="result.success">
+          <h3 class="font-[var(--font-minecraft)] text-white m-0 mb-2">✓ {{ result.mod?.displayName || result.mod?.modId }}</h3>
+          <p class="text-[#aaa] text-sm mb-2">Version: {{ result.mod?.modVersion }} (MC {{ result.mod?.minecraftVersion }})</p>
+          <div class="flex flex-wrap gap-2 mt-3">
+            <span class="bg-[#333] px-2 py-1 rounded text-xs text-[#888]">{{ result.blocksCreated }} blocks</span>
+            <span class="bg-[#333] px-2 py-1 rounded text-xs text-[#888]">{{ result.texturesCreated }} textures</span>
+            <span class="bg-[#333] px-2 py-1 rounded text-xs text-[#888]">{{ result.modelsCreated }} models</span>
+            <span class="bg-[#333] px-2 py-1 rounded text-xs text-[#888]">{{ result.iconsGenerated }} icons</span>
           </div>
           <router-link
             v-if="result.mod?.modId"
             :to="{ name: 'ModGuide', params: { namespace: result.mod.modId } }"
-            class="view-mod-btn"
+            class="minecraft-btn !bg-[var(--color-mc-link)] !text-black hover:!bg-[var(--color-mc-link-hover)] !mt-4 block w-full"
           >
             View Mod →
           </router-link>
         </div>
-        <div v-else class="result-content">
-          <h3>✗ Error</h3>
-          <p>{{ result.error }}</p>
+        <div v-else>
+          <h3 class="font-[var(--font-minecraft)] text-white m-0 mb-2">✗ Error</h3>
+          <p class="text-[#aaa] text-sm">{{ result.error }}</p>
         </div>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.upload-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: calc(100vh - 200px);
-  padding: 20px;
-}
-
-.upload-card {
-  background-color: #2a2a2a;
-  border: 2px solid #555;
-  border-radius: 8px;
-  padding: 32px;
-  max-width: 500px;
-  width: 100%;
-  text-align: center;
-}
-
-.upload-title {
-  font-family: 'Minecraft', monospace;
-  font-size: 28px;
-  color: #fff;
-  margin: 0 0 12px 0;
-}
-
-.upload-description {
-  color: #888;
-  margin: 0 0 24px 0;
-  font-size: 14px;
-}
-
-.upload-dropzone {
-  border: 3px dashed #555;
-  border-radius: 8px;
-  padding: 40px 20px;
-  cursor: pointer;
-  transition: all 0.2s;
-  background-color: #1a1a1a;
-}
-
-.upload-dropzone:hover:not(.dropzone-disabled) {
-  border-color: #888;
-  background-color: #222;
-}
-
-.dropzone-active {
-  border-color: #ffaa00 !important;
-  background-color: #2a2a1a !important;
-}
-
-.dropzone-disabled {
-  cursor: default;
-}
-
-.upload-placeholder,
-.upload-selected {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.upload-progress {
-  text-align: left;
-}
-
-.progress-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  justify-content: center;
-}
-
-.progress-header p {
-  color: #fff;
-  margin: 0;
-  font-size: 14px;
-}
-
-.upload-icon,
-.file-icon {
-  font-size: 48px;
-  margin-bottom: 8px;
-}
-
-.upload-placeholder p {
-  color: #aaa;
-  margin: 0;
-}
-
-.upload-hint {
-  font-size: 12px;
-  color: #666 !important;
-}
-
-.file-name {
-  color: #fff;
-  font-weight: bold;
-  margin: 0;
-  word-break: break-all;
-}
-
-.file-size {
-  color: #888;
-  font-size: 12px;
-  margin: 0;
-}
-
-/* Steps */
-.steps-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.step-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: 4px;
-  background-color: #222;
-  transition: all 0.2s;
-}
-
-.step-pending {
-  opacity: 0.5;
-}
-
-.step-running {
-  background-color: #2a2a1a;
-  border-left: 3px solid #ffaa00;
-}
-
-.step-completed {
-  background-color: #1a2a1a;
-}
-
-.step-error {
-  background-color: #2a1a1a;
-  border-left: 3px solid #a44;
-}
-
-.step-icon {
-  width: 20px;
-  text-align: center;
-  font-size: 14px;
-}
-
-.step-pending .step-icon { color: #555; }
-.step-running .step-icon { color: #ffaa00; }
-.step-completed .step-icon { color: #4a4; }
-.step-error .step-icon { color: #a44; }
-
-.step-spinner {
-  display: inline-block;
-  animation: spin 1s linear infinite;
-}
-
-.step-content {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.step-name {
-  color: #ccc;
-  font-size: 13px;
-}
-
-.step-progress {
-  color: #888;
-  font-size: 11px;
-  background-color: #333;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-.step-message {
-  color: #666;
-  font-size: 11px;
-  margin-left: auto;
-}
-
-/* Buttons */
-.upload-btn,
-.cancel-btn,
-.view-mod-btn {
-  margin-top: 16px;
-  padding: 10px 24px;
-  font-family: 'Minecraft', monospace;
-  font-size: 14px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-decoration: none;
-  display: inline-block;
-}
-
-.upload-btn {
-  background-color: #4a4;
-  color: #fff;
-}
-
-.upload-btn:hover {
-  background-color: #5b5;
-}
-
-.cancel-btn {
-  background-color: transparent;
-  color: #888;
-  margin-left: 8px;
-}
-
-.cancel-btn:hover {
-  color: #fff;
-}
-
-.view-mod-btn {
-  background-color: #ffaa00;
-  color: #000;
-  margin-top: 16px;
-}
-
-.view-mod-btn:hover {
-  background-color: #ffbb33;
-}
-
-/* Spinner */
-.spinner {
-  width: 24px;
-  height: 24px;
-  border: 3px solid #333;
-  border-top-color: #ffaa00;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Résultat */
-.upload-result {
-  margin-top: 24px;
-  padding: 16px;
-  border-radius: 8px;
-  text-align: left;
-}
-
-.result-success {
-  background-color: #1a2a1a;
-  border: 1px solid #4a4;
-}
-
-.result-error {
-  background-color: #2a1a1a;
-  border: 1px solid #a44;
-}
-
-.result-content h3 {
-  margin: 0 0 8px 0;
-  color: #fff;
-  font-family: 'Minecraft', monospace;
-}
-
-.result-content p {
-  margin: 0 0 8px 0;
-  color: #aaa;
-  font-size: 14px;
-}
-
-.result-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.result-stats span {
-  background-color: #333;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #888;
-}
-</style>

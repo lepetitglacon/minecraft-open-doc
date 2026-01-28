@@ -44,39 +44,84 @@
         <router-link :to="{ name: 'ModExamples', params: { namespace } }" class="btn btn-cancel">
           Cancel
         </router-link>
-        <button class="btn btn-save" @click="openSaveDialog" :disabled="placedBlocks.length === 0">
+        <button class="btn btn-save" @click="openSaveDialog" >
           Save Scene
         </button>
       </div>
     </div>
 
-    <div class="viewport" ref="viewportRef">
-      <div class="controls-hint">
-        Left Click: Place | Right Click: Remove | Drag: Rotate | Scroll: Zoom
-      </div>
-      <div class="viewport-tools">
-        <select v-model="selectedBackground" @change="onBackgroundChange" class="background-select">
-          <option value="overworld">Overworld</option>
-          <option value="nether">Nether</option>
-          <option value="end">End</option>
-          <option value="void">Void</option>
-        </select>
-        <button
-          class="tool-btn"
-          :class="{ active: isShadowsEnabled }"
-          @click="toggleShadows"
-          title="Toggle Shadows"
-        >
-          Shadows
-        </button>
-        <button
-          class="tool-btn"
-          :class="{ active: isConnectionMode }"
-          @click="toggleConnectionMode"
-          title="Toggle Edit Mode"
-        >
-          Edit
-        </button>
+    <div class="viewport-container">
+      <div class="viewport-wrapper">
+         <div 
+           class="viewport" 
+           ref="viewportRef"
+         ></div>
+         
+         <!-- Overlay Controls -->
+         <div class="controls-overlay">
+            <div class="controls-hint">
+               Left Click: Place<br>
+               Right Click: Remove<br>
+               Drag: Rotate<br>
+               Scroll: Zoom
+            </div>
+
+            <div class="viewport-tools">
+              <!-- Import Button -->
+              <div 
+                class="tool-btn import-btn"
+                :class="{ 'window-drag': isWindowDragging, 'drag-over': isButtonDragOver }"
+                @click="triggerFileInput"
+                @drop.prevent="handleButtonDrop"
+                @dragover.prevent="isButtonDragOver = true"
+                @dragleave.prevent="isButtonDragOver = false"
+                title="Import GLTF Scene"
+              >
+                 <Download class="w-5 h-5" />
+                 <span class="label">Import</span>
+                 <input  
+                    type="file" 
+                    ref="fileInputRef" 
+                    class="hidden" 
+                    accept=".gltf,.glb" 
+                    @change="handleFileSelect"
+                 />
+              </div>
+
+              <div class="separator"></div>
+
+              <select v-model="selectedBackground" @change="onBackgroundChange" class="background-select">
+                <option value="overworld">Overworld</option>
+                <option value="nether">Nether</option>
+                <option value="end">End</option>
+                <option value="void">Void</option>
+              </select>
+              <button
+                class="tool-btn"
+                :class="{ active: isShadowsEnabled }"
+                @click="toggleShadows"
+                title="Toggle Shadows"
+              >
+                Shadows
+              </button>
+              <button
+                class="tool-btn"
+                :class="{ active: isConnectionMode }"
+                @click="toggleConnectionMode"
+                title="Toggle Edit Mode"
+              >
+                Edit
+              </button>
+              <button
+                class="tool-btn"
+                :class="{ active: isViewOnly }"
+                @click="toggleViewMode"
+                title="Toggle Raw GLTF / Parsed Blocks"
+              >
+                {{ isViewOnly ? 'Raw' : 'Parsed' }}
+              </button>
+            </div>
+         </div>
       </div>
     </div>
 
@@ -101,8 +146,11 @@ import { useBlocks } from '../../composables/useBlocks';
 import { SceneRenderer, type BackgroundType } from './SceneRenderer';
 import { useApi } from '../../composables/useApi';
 import { useRouter } from 'vue-router';
+import { useGltfLoader } from '../../composables/useGltfLoader';
+import { Download } from 'lucide-vue-next';
 
 const api = useApi();
+const { loadGltfFromFile } = useGltfLoader();
 
 const props = defineProps<{
   namespace: string;
@@ -150,6 +198,95 @@ const selectedBlock = ref<any>(null);
 const isConnectionMode = ref(false);
 const isShadowsEnabled = ref(true);
 const selectedBackground = ref<BackgroundType>('void');
+const isViewOnly = ref(false);
+
+// Import Drag & Drop
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const isWindowDragging = ref(false);
+const isButtonDragOver = ref(false);
+let dragCounter = 0;
+
+const onWindowDragEnter = (e: DragEvent) => {
+  e.preventDefault();
+  dragCounter++;
+  if (dragCounter > 0) {
+    isWindowDragging.value = true;
+  }
+};
+
+const onWindowDragLeave = (e: DragEvent) => {
+  e.preventDefault();
+  dragCounter--;
+  if (dragCounter <= 0) {
+    dragCounter = 0;
+    isWindowDragging.value = false;
+  }
+};
+
+const onWindowDrop = (e: DragEvent) => {
+  e.preventDefault();
+  dragCounter = 0;
+  isWindowDragging.value = false;
+  isButtonDragOver.value = false;
+};
+
+const onWindowDragOver = (e: DragEvent) => {
+  e.preventDefault();
+};
+
+const triggerFileInput = () => {
+  fileInputRef.value?.click();
+};
+
+const handleFileSelect = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (file) {
+    await processFile(file);
+    // Reset input
+    input.value = '';
+  }
+};
+
+const handleButtonDrop = async (event: DragEvent) => {
+  isButtonDragOver.value = false;
+  isWindowDragging.value = false;
+  dragCounter = 0;
+  
+  const file = event.dataTransfer?.files[0];
+  if (file) {
+    await processFile(file);
+  }
+};
+
+const processFile = async (file: File) => {
+  if (file.name.endsWith('.gltf') || file.name.endsWith('.glb')) {
+    try {
+      const gltf = await loadGltfFromFile(file);
+      console.log(gltf)
+      if (renderer) {
+        renderer.dispose();
+        renderer = new SceneRenderer(viewportRef.value!, { viewOnly: isViewOnly.value });
+        renderer.processGltf(gltf);
+        
+        renderer.setBackground(selectedBackground.value);
+        renderer.setShadows(isShadowsEnabled.value);
+        setupRendererEvents();
+        
+        // Reselect block if any
+        if (selectedBlock.value) {
+            selectBlock(selectedBlock.value);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load dropped GLTF", e);
+      alert("Failed to load GLTF file.");
+    }
+  } else {
+     alert("Please upload a .gltf or .glb file.");
+  }
+};
+
 
 const onBackgroundChange = () => {
   if (renderer) {
@@ -170,6 +307,14 @@ const toggleShadows = () => {
   isShadowsEnabled.value = !isShadowsEnabled.value;
   if (renderer) {
     renderer.setShadows(isShadowsEnabled.value);
+  }
+};
+
+const toggleViewMode = () => {
+  isViewOnly.value = !isViewOnly.value;
+  initRenderer();
+  if (selectedBlock.value) {
+    selectBlock(selectedBlock.value);
   }
 };
 
@@ -217,12 +362,10 @@ const saveScene = async () => {
   }
 };
 
-// Lifecycle
-onMounted(() => {
-  if (viewportRef.value) {
-    renderer = new SceneRenderer(viewportRef.value);
-    renderer.init()
-    
+const setupRendererEvents = () => {
+  if (!renderer) return;
+
+  if (!isViewOnly.value) {
     renderer.onBlocksDetected = (ids) => {
       detectedBlockIds.value = ids;
     };
@@ -230,34 +373,76 @@ onMounted(() => {
     renderer.onBlockPlaced = (pos, blockId) => {
       placedBlocks.value.push({ x: pos.x, y: pos.y, z: pos.z, blockId });
     };
-    
+
     renderer.onBlockRemoved = (pos) => {
       const idx = placedBlocks.value.findIndex(b => b.x === pos.x && b.y === pos.y && b.z === pos.z);
       if (idx !== -1) placedBlocks.value.splice(idx, 1);
     };
-    
+
     renderer.onBlockPicked = (blockId) => {
       const found = blocks.value.find(b => b.blockId === blockId);
       if (found) {
         selectBlock(found);
       } else {
-        search.value = blockId; // Filter the list to find it if possible
+        search.value = blockId;
       }
     };
+
+    renderer.onSceneLoaded = (loadedBlocks) => {
+      placedBlocks.value = loadedBlocks;
+    };
+
+    renderer.setConnectionMode(isConnectionMode.value);
   }
+};
+
+// Renderer initialization
+const initRenderer = () => {
+  if (!viewportRef.value) return;
+
+  // Dispose previous renderer
+  if (renderer) {
+    renderer.dispose();
+    renderer = null;
+  }
+
+  renderer = new SceneRenderer(viewportRef.value, { viewOnly: isViewOnly.value });
+  renderer.init(); // Loads default test scene
+
+  // Apply current settings
+  renderer.setBackground(selectedBackground.value);
+  renderer.setShadows(isShadowsEnabled.value);
+
+  setupRendererEvents();
+};
+
+// Lifecycle
+onMounted(() => {
+  initRenderer();
+  
+  // Window Drag Events
+  window.addEventListener('dragenter', onWindowDragEnter);
+  window.addEventListener('dragleave', onWindowDragLeave);
+  window.addEventListener('dragover', onWindowDragOver);
+  window.addEventListener('drop', onWindowDrop);
 });
 
 onUnmounted(() => {
   if (renderer) {
     renderer.dispose();
   }
+  
+  window.removeEventListener('dragenter', onWindowDragEnter);
+  window.removeEventListener('dragleave', onWindowDragLeave);
+  window.removeEventListener('dragover', onWindowDragOver);
+  window.removeEventListener('drop', onWindowDrop);
 });
 </script>
 
 <style scoped>
 .editor-layout {
   display: flex;
-  height: calc(100vh - 70px); /* Adjust based on navbar */
+  height: calc(100vh - 120px); /* Adjust based on new header */
   overflow: hidden;
 }
 
@@ -368,30 +553,127 @@ onUnmounted(() => {
   justify-content: space-between;
 }
 
-.viewport {
+/* Viewport */
+.viewport-container {
   flex: 1;
-  position: relative;
+  display: flex;
+  flex-direction: column;
   background-color: #1a1a2e;
 }
 
-.controls-hint {
+.viewport-wrapper {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.viewport {
+  width: 100%;
+  height: 100%;
+}
+
+/* Controls Overlay */
+.controls-overlay {
   position: absolute;
   top: 10px;
   left: 10px;
+  right: 10px;
+  bottom: 10px;
+  pointer-events: none; /* Let clicks pass through to viewport */
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.controls-hint {
   background-color: #00000088;
-  padding: 5px 10px;
+  padding: 10px;
   color: #fff;
   font-size: 0.8rem;
-  pointer-events: none;
-  user-select: none;
+  border-radius: 4px;
+  pointer-events: auto; /* Allow selecting text if needed */
+  line-height: 1.5;
 }
 
 .viewport-tools {
-  position: absolute;
-  top: 10px;
-  right: 10px;
   display: flex;
+  flex-direction: column;
   gap: 10px;
+  pointer-events: auto;
+}
+
+/* Tool Buttons */
+.tool-btn {
+  background-color: #2a2a2a;
+  border: 2px solid #000;
+  color: white;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: 'Minecraft', monospace;
+  font-size: 0.9rem;
+  text-align: center;
+  transition: all 0.2s;
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.5);
+  min-width: 100px;
+}
+
+.tool-btn:hover {
+  background-color: #333;
+  transform: translateX(-2px);
+}
+
+.tool-btn:active {
+  transform: translateX(0);
+  box-shadow: inset 2px 2px 0px rgba(0,0,0,0.5);
+}
+
+.tool-btn.active {
+  background-color: #4a4;
+  border-color: #fff;
+}
+
+/* Import Button Specifics */
+.import-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-color: #555;
+  background-color: #222;
+}
+
+.import-btn .icon {
+  font-size: 1.1em;
+}
+
+/* Window dragging state */
+.import-btn.window-drag {
+  animation: pulse-border 1s infinite;
+  background-color: #2a2a1a;
+  border-color: #FFAA00;
+  color: #FFAA00;
+}
+
+/* Hover over button state */
+.import-btn.drag-over {
+  background-color: #FFAA00;
+  color: #000;
+  border-color: #fff;
+  transform: scale(1.05);
+  box-shadow: 0 0 15px rgba(255, 170, 0, 0.5);
+}
+
+@keyframes pulse-border {
+  0% { border-color: #555; }
+  50% { border-color: #FFAA00; }
+  100% { border-color: #555; }
+}
+
+.separator {
+  height: 2px;
+  background-color: #000;
+  border-bottom: 1px solid #444;
+  margin: 5px 0;
 }
 
 .background-select {
@@ -402,6 +684,7 @@ onUnmounted(() => {
   cursor: pointer;
   font-family: 'Minecraft', monospace;
   font-size: 0.9rem;
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.5);
 }
 
 .background-select:hover {
@@ -413,25 +696,11 @@ onUnmounted(() => {
   color: white;
 }
 
-.tool-btn {
-  background-color: #2a2a2a;
-  border: 2px solid #000;
-  color: white;
-  padding: 6px 12px;
-  cursor: pointer;
-  font-family: 'Minecraft', monospace;
-  font-size: 0.9rem;
+.hidden {
+  display: none;
 }
 
-.tool-btn:hover {
-  background-color: #333;
-}
-
-.tool-btn.active {
-  background-color: #4a4;
-  border-color: #fff;
-}
-
+/* Dialog and Buttons (Unchanged) */
 .btn {
   padding: 8px 16px;
   font-family: 'Minecraft', monospace;
@@ -465,7 +734,6 @@ onUnmounted(() => {
   background-color: #b55;
 }
 
-/* Dialog */
 .dialog-overlay {
   position: fixed;
   top: 0;

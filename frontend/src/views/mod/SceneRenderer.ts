@@ -1,7 +1,5 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import gltf_scene_test from '../../assets/export_20260126_040516.gltf?url'
-import {GLTFLoader} from "three/examples/jsm/loaders/GLTFLoader.js";
 
 interface TextureMapping {
   [key: string]: string;
@@ -75,12 +73,17 @@ export class SceneRenderer {
   private mouseDownPosition: { x: number; y: number } | null = null;
   private readonly CLICK_THRESHOLD = 5; // pixels
 
+  // View only mode (wiki)
+  private viewOnly: boolean = false;
+
   public onBlockPlaced?: (position: THREE.Vector3, blockId: string) => void;
   public onBlockRemoved?: (position: THREE.Vector3) => void;
   public onBlockPicked?: (blockId: string) => void;
   public onBlocksDetected?: (blockIds: string[]) => void;
+  public onSceneLoaded?: (blocks: Array<{ x: number, y: number, z: number, blockId: string }>) => void;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, options?: { viewOnly?: boolean }) {
+    this.viewOnly = options?.viewOnly ?? false;
     this.container = container;
     
     // Scene
@@ -157,26 +160,237 @@ export class SceneRenderer {
     this.animate();
   }
 
-  async init() {
-    const loader = new GLTFLoader();
-    const gltf = await loader.loadAsync(gltf_scene_test);
-    
-    const blocksToTransfer: THREE.Mesh[] = [];
+  // Initialize scene (empty start)
+  init() {
+    this.onWindowResize();
+  }
+
+  public processGltf(gltf: { scene: THREE.Group }) {
+    // Clear existing blocks
+    // Note: We don't clear the whole scene to keep lights/grid/camera
+
+    // // reset scene
+    // this.placedBlocks.forEach(block => {
+    //     this.scene.remove(block);
+    //     this.disposeObject3D(block);
+    // });
+    // this.placedBlocks.clear();
+
+    // View only mode: just add the scene and setup camera
+    if (this.viewOnly) {
+      this.initViewOnly(gltf);
+      return;
+    }
+
+    const blocksToTransfer: THREE.Object3D[] = [];
     const detectedBlockIds = new Set<string>();
-    
+
     // Calculate bounds for adaptive grid
     const min = new THREE.Vector3(Infinity, Infinity, Infinity);
     const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
     let hasBlocks = false;
 
-    // 1. Traverse and prepare blocks (fix textures, identify valid blocks)
+    // 1. Recursive search for blocks
+    const findBlocks = (node: THREE.Object3D) => {
+        // Check if this node itself is a block candidate
+        // Criteria: Has non-empty 'name' or specific userData
+        
+        let blockId = node.userData.blockId || node.userData.id;
+
+        // If no explicit blockId, check name but filter out common container names
+        if (!blockId && node.userData.name) {
+             const name = node.userData.name;
+             // specific check for "Scene" which is common in GLTF exports
+             const ignoredNames = ['Scene', 'RootNode', 'root', 'scene', 'sketchfab_model']; 
+             if (!ignoredNames.includes(name)) {
+                 blockId = name;
+             }
+        }
+
+        const isBlock = blockId && typeof blockId === 'string' && blockId.trim().length > 0;
+
+        if (isBlock) {
+            // It's a block root!
+            blocksToTransfer.push(node);
+            detectedBlockIds.add(blockId);
+
+            // Compute bounds (using Box3 to include geometry size)
+            const box = new THREE.Box3().setFromObject(node);
+            if (!box.isEmpty()) {
+                min.min(box.min);
+                max.max(box.max);
+                hasBlocks = true;
+            }
+            
+            // Fix materials for children
+            node.traverse((child) => {
+                if (child instanceof THREE.Mesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    const materials = Array.isArray(child.material) ? child.material : [child.material];
+                    materials.forEach((material: THREE.Material) => {
+                      const mat = material as THREE.MeshStandardMaterial;
+                      if (mat.map) {
+                        mat.map.magFilter = THREE.NearestFilter;
+                        mat.map.minFilter = THREE.NearestFilter;
+                      }
+                      if (mat.transparent) {
+                        mat.alphaTest = 0.5;
+                      }
+                    });
+                }
+            });
+            
+            // Do NOT descend further into this block
+            return; 
+        }
+
+        // If not a block, check children
+        if (node.children && node.children.length > 0) {
+            // Iterate backwards or copy array because we might modify hierarchy later?
+            // Actually, for finding we just read.
+            // Copy children array to allow safe iteration even if we modify scene graph later
+            const children = [...node.children]; 
+            for (const child of children) {
+                findBlocks(child);
+            }
+        }
+    };
+
+    // Iterate over direct children of the scene to avoid capturing the scene itself
+    gltf.scene.children.forEach(child => findBlocks(child));
+
+    if (this.onBlocksDetected) {
+      this.onBlocksDetected(Array.from(detectedBlockIds));
+    }
+
+    // Calculate integer shift to center the scene around (0,0,0) while preserving grid alignment
+    // We want the new center to be close to 0,0,0 but positions must remain (N + 0.5)
+    // So we must shift by an integer amount.
+    const center = new THREE.Vector3();
+    if (hasBlocks) {
+        center.addVectors(min, max).multiplyScalar(0.5);
+    }
+    
+    // We want to shift such that the blocks align with the grid.
+    // Assuming the input blocks are grid-aligned relative to each other (1 unit spacing).
+    // We want min.y to be 0 (or closest integer).
+    // We want center.x/z to be 0 (or closest half-integer).
+    
+    // Actually, simply rounding the shift to nearest 0.5 might work?
+    // No, standard grid is integer steps.
+    // If we shift by integers, we preserve fractional alignment.
+    // If min.y is -0.5 (half buried), and we shift by +0.5, we fix it to 0.
+    // If min.y is -0.1 (garbage), we shift by +0.1, we fix it to 0.
+    
+    // So using exact shift (-min.y) aligns the bottom to exactly 0.
+    // This is perfect for Y.
+    
+    // For X/Z, using exact shift (-center.x) aligns center to exactly 0.
+    // This is perfect for centering.
+    
+    // HOWEVER, if the user wants to PLACE new blocks, they will snap to grid (integers + 0.5).
+    // If our imported scene is at 0.123, and we place a block at 0.5, they won't align.
+    // So we MUST snap the imported scene to the grid.
+    
+    // Strategy:
+    // 1. Calculate ideal shift (-center.x, -min.y, -center.z)
+    // 2. Round shift to nearest 0.5 (since blocks are 0.5 based)? 
+    //    Or round such that the resulting coordinates are "nice"?
+    
+    // Let's assume input is "roughly" grid aligned.
+    // We want shift.y such that (min.y + shift.y) is an integer (usually 0).
+    // shift.y = -min.y. (Result is 0).
+    
+    // We want shift.x such that (center.x + shift.x) is ... 0?
+    // If we shift to 0, and the width is 1 (range -0.5 to 0.5), it's aligned.
+    // If width is 2 (range -1 to 1), center is 0. Aligned.
+    // So exact shift seems safe.
+    
+    const shift = new THREE.Vector3(
+        -Math.round(center.x),
+        -min.y,
+        -Math.round(center.z)
+    );
+    
+    // 2. Transfer blocks to the main scene
+    // Important: attach() will remove from old parent.
+    // If we are iterating a tree, reparenting might affect traversal if not careful.
+    // But we already collected the list `blocksToTransfer`.
+    const loadedBlocks: Array<{ x: number, y: number, z: number, blockId: string }> = [];
+
+    blocksToTransfer.forEach(child => {
+      this.scene.attach(child);
+      
+      // Apply centering shift
+      child.position.add(shift);
+
+      // Determine grid cell based on bounding box center
+      // This handles different pivots (center vs bottom) correctly
+      const box = new THREE.Box3().setFromObject(child);
+      const center = box.getCenter(new THREE.Vector3());
+      
+      const x = Math.floor(center.x) + 0.5;
+      const y = Math.floor(center.y) + 0.5;
+      const z = Math.floor(center.z) + 0.5;
+
+      const key = `${x},${y},${z}`;
+      this.placedBlocks.set(key, child);
+
+      const blockId = child.userData.name || child.userData.blockId || child.userData.id;
+      if (blockId) {
+          loadedBlocks.push({ x, y, z, blockId });
+      }
+    });
+
+    if (this.onSceneLoaded) {
+        this.onSceneLoaded(loadedBlocks);
+    }
+    
+    // 3. Update Grid Size
+    if (hasBlocks) {
+        // Expand bounds slightly to ensure grid covers it
+        const sizeX = Math.abs(max.x - min.x);
+        const sizeZ = Math.abs(max.z - min.z);
+        const sizeY = Math.abs(max.y - min.y);
+        const maxSize = Math.max(sizeX, sizeZ, 20); // Min 20
+        const gridSize = Math.ceil(maxSize / 2) * 2 + 10; // Add padding and ensure even
+        
+        this.scene.remove(this.gridHelper);
+        this.gridHelper = new THREE.GridHelper(gridSize, gridSize, 0x444444, 0x222222);
+        // Grid always at (0,0,0) now that we centered the blocks
+        this.gridHelper.position.set(0, 0, 0);
+        this.scene.add(this.gridHelper);
+
+        // Center Camera on the scene origin (0, Y_center, 0)
+        // The blocks are centered on X/Z at 0.
+        // On Y, they start at 0 and go up to sizeY.
+        // So target should be at sizeY / 2.
+        this.controls.target.set(0, sizeY / 2, 0);
+        
+        // Calculate distance to fit the object
+        const fitHeightDistance = sizeY / (2 * Math.atan((Math.PI * this.camera.fov) / 360));
+        const fitWidthDistance = fitHeightDistance / this.camera.aspect;
+        const distance = Math.max(sizeX, sizeZ, fitHeightDistance, fitWidthDistance) * 1.5 + 5;
+
+        this.camera.position.set(distance, sizeY / 2 + distance * 0.8, distance);
+        this.controls.update();
+    }
+  }
+
+  private initViewOnly(gltf: { scene: THREE.Group }) {
+    // Calculate bounds
+    const min = new THREE.Vector3(Infinity, Infinity, Infinity);
+    const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+    let hasMeshes = false;
+
+    // Fix textures for pixel art style and calculate bounds
     gltf.scene.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
         child.receiveShadow = true;
 
         const materials = Array.isArray(child.material) ? child.material : [child.material];
-        
         materials.forEach((material: THREE.Material) => {
           const mat = material as THREE.MeshStandardMaterial;
           if (mat.map) {
@@ -196,68 +410,40 @@ export class SceneRenderer {
           }
         });
 
-        // Check if it is a block we should manage
-        const blockId = child.userData.name || child.userData.blockId || child.userData.id;
-        // Relaxed condition: Just check if we have a non-empty string ID
-        if (blockId && typeof blockId === 'string' && blockId.trim().length > 0) {
-          blocksToTransfer.push(child);
-          detectedBlockIds.add(blockId);
-          
-          // Update bounds
-          child.geometry.computeBoundingBox();
-          const bbox = child.geometry.boundingBox!.clone();
+        // Update bounds
+        child.geometry.computeBoundingBox();
+        if (child.geometry.boundingBox) {
+          const bbox = child.geometry.boundingBox.clone();
           bbox.applyMatrix4(child.matrixWorld);
-          
           min.min(bbox.min);
           max.max(bbox.max);
-          hasBlocks = true;
-        } else {
-             // Debug: Log why we skipped it
-             // console.log('Skipping object:', child.name, child.userData);
+          hasMeshes = true;
         }
       }
     });
 
-    if (this.onBlocksDetected) {
-      this.onBlocksDetected(Array.from(detectedBlockIds));
-    }
+    // Add entire scene directly
+    this.scene.add(gltf.scene);
 
-    // 2. Transfer blocks to the main scene
-    blocksToTransfer.forEach(child => {
-      this.scene.attach(child);
+    // Adjust grid and camera
+    if (hasMeshes) {
+      const sizeX = Math.abs(max.x - min.x);
+      const sizeZ = Math.abs(max.z - min.z);
+      const maxSize = Math.max(sizeX, sizeZ, 20);
+      const gridSize = Math.ceil(maxSize / 2) * 2 + 10;
 
-      const pos = new THREE.Vector3();
-      child.getWorldPosition(pos);
-      
-      const x = Math.floor(pos.x) + 0.5;
-      const y = Math.floor(pos.y) + 0.5;
-      const z = Math.floor(pos.z) + 0.5;
-      
-      const key = `${x},${y},${z}`;
-      this.placedBlocks.set(key, child);
-    });
-    
-    // 3. Update Grid Size
-    if (hasBlocks) {
-        const sizeX = Math.abs(max.x - min.x);
-        const sizeZ = Math.abs(max.z - min.z);
-        const maxSize = Math.max(sizeX, sizeZ, 20); // Min 20
-        const gridSize = Math.ceil(maxSize / 2) * 2 + 10; // Add padding and ensure even
-        
-        // Center the grid
-        const centerX = (min.x + max.x) / 2;
-        const centerZ = (min.z + max.z) / 2;
-        
-        this.scene.remove(this.gridHelper);
-        this.gridHelper = new THREE.GridHelper(gridSize, gridSize, 0x444444, 0x222222);
-        this.gridHelper.position.set(Math.floor(centerX), 0, Math.floor(centerZ));
-        this.scene.add(this.gridHelper);
+      const centerX = (min.x + max.x) / 2;
+      const centerZ = (min.z + max.z) / 2;
 
-        // Center Camera on the scene
-        this.controls.target.set(centerX, 0, centerZ);
-        const distance = Math.max(sizeX, sizeZ) * 0.8 + 5; // Distance based on scene size
-        this.camera.position.set(centerX + distance, distance * 0.8 + 5, centerZ + distance);
-        this.controls.update();
+      this.scene.remove(this.gridHelper);
+      this.gridHelper = new THREE.GridHelper(gridSize, gridSize, 0x444444, 0x222222);
+      this.gridHelper.position.set(Math.floor(centerX), 0, Math.floor(centerZ));
+      this.scene.add(this.gridHelper);
+
+      this.controls.target.set(centerX, 0, centerZ);
+      const distance = Math.max(sizeX, sizeZ) * 0.8 + 5;
+      this.camera.position.set(centerX + distance, distance * 0.8 + 5, centerZ + distance);
+      this.controls.update();
     }
   }
 
@@ -281,12 +467,16 @@ export class SceneRenderer {
   }
 
   private bindEvents() {
-    this.renderer.domElement.addEventListener('mousemove', this.onMouseMove.bind(this));
-    this.renderer.domElement.addEventListener('mousedown', this.onMouseDown.bind(this));
-    this.renderer.domElement.addEventListener('mouseup', this.onMouseUp.bind(this));
-    this.renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('resize', this.onWindowResize.bind(this));
-    window.addEventListener('keydown', this.onKeyDown);
+
+    // Edit events only in edit mode
+    if (!this.viewOnly) {
+      this.renderer.domElement.addEventListener('mousemove', this.onMouseMove.bind(this));
+      this.renderer.domElement.addEventListener('mousedown', this.onMouseDown.bind(this));
+      this.renderer.domElement.addEventListener('mouseup', this.onMouseUp.bind(this));
+      this.renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+      window.addEventListener('keydown', this.onKeyDown);
+    }
   }
 
   private onKeyDown = (event: KeyboardEvent) => {
@@ -984,6 +1174,9 @@ export class SceneRenderer {
 
   public dispose() {
     this.renderer.dispose();
+    if (this.container && this.renderer.domElement && this.container.contains(this.renderer.domElement)) {
+        this.container.removeChild(this.renderer.domElement);
+    }
 
     // Dispose textures
     this.textureCache.forEach(texture => texture.dispose());

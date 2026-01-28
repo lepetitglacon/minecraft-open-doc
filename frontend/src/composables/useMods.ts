@@ -13,6 +13,10 @@ export interface Mod {
   logoFile?: string;
   logoBase64?: string;
   websiteUrl?: string;
+  sourceUrl?: string;
+  issueTrackerUrl?: string;
+  license?: string;
+  loaders?: string[];
 }
 
 interface ModsResponse {
@@ -60,4 +64,17 @@ export function useMods(options: UseModsOptions = {}) {
     total: computed(() => query.data.value?.total || 0),
     totalPages: computed(() => query.data.value?.pages || 1),
   };
+}
+
+export function useMod(modId: Ref<string>) {
+  const api = useApi();
+
+  return useQuery({
+    queryKey: computed(() => ['mod', modId.value]),
+    queryFn: async (): Promise<Mod> => {
+      const { data } = await api.get(`/mods/${modId.value}`);
+      return data;
+    },
+    enabled: computed(() => !!modId.value),
+  });
 }
